@@ -215,7 +215,7 @@ struct Key1 {
 };
 
 struct Value1 {
-    char* config_key;
+    char config_key[64];
 };
 
 struct Map1 {
@@ -254,11 +254,11 @@ struct Map1 characteristic_config_mapping[] = {
 #define CONFIG_SENSOR_POLL_INTERVAL_MS "CONFIG_SENSOR_POLL_INTERVAL_MS"
 
 struct Key2 {
-    char* config_key;
+    char config_key[64];
 };
 
 struct Value2 {
-    char* value;
+    char value[64];
 };
 
 struct Map2 {

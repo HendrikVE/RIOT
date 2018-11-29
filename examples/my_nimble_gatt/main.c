@@ -136,7 +136,7 @@ static int gatt_svr_chr_access_rw_demo(
     (void) attr_handle;
     (void) arg;
 
-    //int rc = 0;
+    int rc = 0;
 
     const ble_uuid_t* accessed_uuid = ctxt->chr->uuid;
 
@@ -148,23 +148,64 @@ static int gatt_svr_chr_access_rw_demo(
             = sizeof(config)
               / sizeof(config[0]);
 
-    struct Map1 map1_item;
+    struct Map1 *map1_item;
     for (int i = 0; i < map_size1; i++) {
 
-        map1_item = characteristic_config_mapping[i];
+        map1_item = &characteristic_config_mapping[i];
 
-        if (ble_uuid_cmp((ble_uuid_t*) map1_item.key.uuid, accessed_uuid) == 0) {
+        if (ble_uuid_cmp((ble_uuid_t*) map1_item->key.uuid, accessed_uuid) == 0) {
 
-            struct Map2 map2_item;
+            struct Map2 *map2_item;
             for (int j = 0; j < map_size2; j++) {
 
-                map2_item = config[j];
+                map2_item = &config[j];
 
-                if (strcmp(map1_item.value.config_key, map2_item.key.config_key) == 0) {
-                    puts(map1_item.value.config_key);
-                    return 0;
+                if (strcmp(map1_item->value.config_key, map2_item->key.config_key) == 0) {
+
+                    switch (ctxt->op) {
+
+                        case BLE_GATT_ACCESS_OP_READ_CHR:
+
+                            printf("current value for key %s: '%s'\n",
+                                   map2_item->key.config_key,
+                                   map2_item->value.value);
+
+                            /* send given data to the client */
+                            rc = os_mbuf_append(ctxt->om, &map2_item->value.value,
+                                                strlen(map2_item->value.value));
+
+                            break;
+
+                        case BLE_GATT_ACCESS_OP_WRITE_CHR:
+
+                            printf("old value for key %s: '%s'\n",
+                                   map2_item->key.config_key,
+                                   map2_item->value.value);
+
+                            uint16_t om_len;
+                            om_len = OS_MBUF_PKTLEN(ctxt->om);
+
+                            /* read sent data */
+                            rc = ble_hs_mbuf_to_flat(ctxt->om, &map2_item->value.value,
+                                                     sizeof map2_item->value.value, &om_len);
+                            /* we need to null-terminate the received string */
+                            map2_item->value.value[om_len] = '\0';
+
+                            printf("new value for key %s: '%s'\n",
+                                   map2_item->key.config_key,
+                                   map2_item->value.value);
+
+                            break;
+
+                        default:
+                            puts("unhandled operation!");
+                            rc = 1;
+                            break;
+                    }
                 }
             }
+
+            return rc;
         }
     }
 
