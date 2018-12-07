@@ -202,17 +202,15 @@ static int gatt_svr_chr_access_rw_demo(
     const ble_uuid_t* accessed_uuid = ctxt->chr->uuid;
 
     int map_size1
-            = sizeof(characteristic_config_mapping)
-              / sizeof(characteristic_config_mapping[0]);
+            = sizeof(chr_cfg_mapping)
+              / sizeof(chr_cfg_mapping[0]);
 
-    int map_size2
-            = sizeof(config)
-              / sizeof(config[0]);
+    int map_size2 = sizeof(config) / sizeof(config[0]);
 
     struct ble_uuid_config_key_map *ble_uuid_config_key_map_item;
     for (int i = 0; i < map_size1; i++) {
 
-        ble_uuid_config_key_map_item = &characteristic_config_mapping[i];
+        ble_uuid_config_key_map_item = &chr_cfg_mapping[i];
 
         if (ble_uuid_cmp((ble_uuid_t*) ble_uuid_config_key_map_item->key.uuid, accessed_uuid) == 0) {
 
