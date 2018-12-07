@@ -213,20 +213,20 @@ static const struct ble_gatt_svc_def gatt_svr_svcs[] = {
     },
 };
 
-struct Key1 {
+struct ble_uuid_config_key_map_key {
     const ble_uuid128_t* uuid;
 };
 
-struct Value1 {
+struct ble_uuid_config_key_map_value {
     char config_key[64];
 };
 
-struct Map1 {
-    struct Key1 key;
-    struct Value1 value;
+struct ble_uuid_config_key_map {
+    struct ble_uuid_config_key_map_key key;
+    struct ble_uuid_config_key_map_value value;
 };
 
-struct Map1 characteristic_config_mapping[] = {
+struct ble_uuid_config_key_map characteristic_config_mapping[] = {
     {{&gatt_svr_chr_config_device_room_uuid}, {KEY_CONFIG_DEVICE_ROOM}},
     {{&gatt_svr_chr_config_device_id_uuid}, {KEY_CONFIG_DEVICE_ID}},
     {{&gatt_svr_chr_config_ota_host_uuid}, {KEY_CONFIG_OTA_HOST}},

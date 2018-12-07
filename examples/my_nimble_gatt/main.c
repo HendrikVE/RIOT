@@ -209,19 +209,19 @@ static int gatt_svr_chr_access_rw_demo(
             = sizeof(config)
               / sizeof(config[0]);
 
-    struct Map1 *map1_item;
+    struct ble_uuid_config_key_map *ble_uuid_config_key_map_item;
     for (int i = 0; i < map_size1; i++) {
 
-        map1_item = &characteristic_config_mapping[i];
+        ble_uuid_config_key_map_item = &characteristic_config_mapping[i];
 
-        if (ble_uuid_cmp((ble_uuid_t*) map1_item->key.uuid, accessed_uuid) == 0) {
+        if (ble_uuid_cmp((ble_uuid_t*) ble_uuid_config_key_map_item->key.uuid, accessed_uuid) == 0) {
 
             struct Map2 *map2_item;
             for (int j = 0; j < map_size2; j++) {
 
                 map2_item = &config[j];
 
-                if (strcmp(map1_item->value.config_key, map2_item->key.config_key) == 0) {
+                if (strcmp(ble_uuid_config_key_map_item->value.config_key, map2_item->key.config_key) == 0) {
 
                     switch (ctxt->op) {
 
