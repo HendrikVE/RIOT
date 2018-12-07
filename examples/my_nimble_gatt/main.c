@@ -169,6 +169,8 @@ static void start_advertise(void)
     advp.disc_mode = BLE_GAP_DISC_MODE_GEN;
     rc = ble_gap_adv_start(own_addr_type, NULL, BLE_HS_FOREVER,
                            &advp, gap_event_cb, NULL);
+
+    puts("assert ble_gap_adv_start");
     assert(rc == 0);
     (void)rc;
 }
@@ -286,7 +288,10 @@ int main(void)
      * if device_id is an empty string, the config flash page was probably
      * not initialized yet, because it is the first run of the application
      */
-    if (strlen((char*) config_values_tmp.device_id) != 0) {
+    uint8_t first_byte = config_values_tmp.device_id[0];
+
+    /* check if first ascii is within range of allowed characters */
+    if (first_byte >= 32 && first_byte <= 126) {
         puts("override defaults with the data read from flash");
         config_values = config_values_tmp;
     }
@@ -298,9 +303,11 @@ int main(void)
     int rc = 0;
 
     rc = ble_gatts_count_cfg(gatt_svr_svcs);
+    puts("assert ble_gatts_count_cfg");
     assert(rc == 0);
 
     rc = ble_gatts_add_svcs(gatt_svr_svcs);
+    puts("assert ble_gatts_add_svcs");
     assert(rc == 0);
 
     /* set the device name */
@@ -318,8 +325,10 @@ int main(void)
 
     /* configure device address */
     rc = ble_hs_util_ensure_addr(0);
+    puts("assert ble_hs_util_ensure_addr");
     assert(rc == 0);
     rc = ble_hs_id_infer_auto(0, &own_addr_type);
+    puts("assert ble_hs_id_infer_auto");
     assert(rc == 0);
     (void)rc;
 
