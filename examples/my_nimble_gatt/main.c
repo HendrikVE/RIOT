@@ -75,20 +75,20 @@ struct config_values config_values = {
 };
 struct config_values config_values_tmp = {};
 
-struct Key2 {
+struct config_map_key {
     char config_key[64];
 };
 
-struct Value2 {
+struct config_map_value {
     uint8_t *value;
 };
 
-struct Map2 {
-    struct Key2 key;
-    struct Value2 value;
+struct config_map {
+    struct config_map_key key;
+    struct config_map_value value;
 };
 
-struct Map2 config[] = {
+struct config_map config[] = {
         {{KEY_CONFIG_DEVICE_ROOM}, {config_values.device_room}},
         {{KEY_CONFIG_DEVICE_ID}, {config_values.device_id}},
         {{KEY_CONFIG_OTA_HOST}, {config_values.ota_host}},
@@ -216,45 +216,45 @@ static int gatt_svr_chr_access_rw_demo(
 
         if (ble_uuid_cmp((ble_uuid_t*) ble_uuid_config_key_map_item->key.uuid, accessed_uuid) == 0) {
 
-            struct Map2 *map2_item;
+            struct config_map *config_map_item;
             for (int j = 0; j < map_size2; j++) {
 
-                map2_item = &config[j];
+                config_map_item = &config[j];
 
-                if (strcmp(ble_uuid_config_key_map_item->value.config_key, map2_item->key.config_key) == 0) {
+                if (strcmp(ble_uuid_config_key_map_item->value.config_key, config_map_item->key.config_key) == 0) {
 
                     switch (ctxt->op) {
 
                         case BLE_GATT_ACCESS_OP_READ_CHR:
 
                             printf("current value for key %s: '%s'\n",
-                                   map2_item->key.config_key,
-                                   (char*) (map2_item->value.value));
+                                   config_map_item->key.config_key,
+                                   (char*) (config_map_item->value.value));
 
                             /* send given data to the client */
-                            rc = os_mbuf_append(ctxt->om, map2_item->value.value,
-                                                strlen((char*) (map2_item->value.value)));
+                            rc = os_mbuf_append(ctxt->om, config_map_item->value.value,
+                                                strlen((char*) (config_map_item->value.value)));
 
                             break;
 
                         case BLE_GATT_ACCESS_OP_WRITE_CHR:
 
                             printf("old value for key %s: '%s'\n",
-                                   map2_item->key.config_key,
-                                   (char*) (map2_item->value.value));
+                                   config_map_item->key.config_key,
+                                   (char*) (config_map_item->value.value));
 
                             uint16_t om_len;
                             om_len = OS_MBUF_PKTLEN(ctxt->om);
 
                             /* read sent data */
-                            rc = ble_hs_mbuf_to_flat(ctxt->om, map2_item->value.value,
-                                                     sizeof map2_item->value.value, &om_len);
+                            rc = ble_hs_mbuf_to_flat(ctxt->om, config_map_item->value.value,
+                                                     sizeof config_map_item->value.value, &om_len);
                             /* we need to null-terminate the received string */
-                            map2_item->value.value[om_len] = '\0';
+                            config_map_item->value.value[om_len] = '\0';
 
                             printf("new value for key %s: '%s'\n",
-                                   map2_item->key.config_key,
-                                   (char*) (map2_item->value.value));
+                                   config_map_item->key.config_key,
+                                   (char*) (config_map_item->value.value));
 
                             break;
 
