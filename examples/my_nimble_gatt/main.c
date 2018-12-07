@@ -42,6 +42,67 @@
 #include "services/gatt/ble_svc_gatt.h"
 
 #include "ble_service_uuids.h"
+#include "config.h"
+
+#define CONFIG_DEVICE_ROOM "CONFIG_DEVICE_ROOM"
+#define CONFIG_DEVICE_ID "CONFIG_DEVICE_ID"
+#define CONFIG_OTA_HOST "CONFIG_OTA_HOST"
+#define CONFIG_OTA_FILENAME "CONFIG_OTA_FILENAME"
+#define CONFIG_OTA_SERVER_USERNAME "CONFIG_OTA_SERVER_USERNAME"
+#define CONFIG_OTA_SERVER_PASSWORD "CONFIG_OTA_SERVER_PASSWORD"
+#define CONFIG_ESP_WIFI_SSID "CONFIG_ESP_WIFI_SSID"
+#define CONFIG_ESP_WIFI_PASSWORD "CONFIG_ESP_WIFI_PASSWORD"
+#define CONFIG_MQTT_USER "CONFIG_MQTT_USER"
+#define CONFIG_MQTT_PASSWORD "CONFIG_MQTT_PASSWORD"
+#define CONFIG_MQTT_SERVER_IP "CONFIG_MQTT_SERVER_IP"
+#define CONFIG_MQTT_SERVER_PORT "CONFIG_MQTT_SERVER_PORT"
+#define CONFIG_SENSOR_POLL_INTERVAL_MS "CONFIG_SENSOR_POLL_INTERVAL_MS"
+
+struct config_values config_values = {
+        .device_room = CONFIG_DEVICE_ROOM,
+        .device_id = CONFIG_DEVICE_ID,
+        .ota_host = CONFIG_OTA_HOST,
+        .ota_filename = CONFIG_OTA_FILENAME,
+        .ota_server_username = CONFIG_OTA_SERVER_USERNAME,
+        .ota_server_password = CONFIG_OTA_SERVER_PASSWORD,
+        .wifi_ssid = CONFIG_ESP_WIFI_SSID,
+        .wifi_password = CONFIG_ESP_WIFI_PASSWORD,
+        .mqtt_user = CONFIG_MQTT_USER,
+        .mqtt_password = CONFIG_MQTT_PASSWORD,
+        .mqtt_server_ip = CONFIG_MQTT_SERVER_IP,
+        .mqtt_server_port = CONFIG_MQTT_SERVER_PORT,
+        .sensor_poll_interval_ms = CONFIG_SENSOR_POLL_INTERVAL_MS
+};
+struct config_values config_values_tmp = {};
+
+struct Key2 {
+    char config_key[64];
+};
+
+struct Value2 {
+    uint8_t *value;
+};
+
+struct Map2 {
+    struct Key2 key;
+    struct Value2 value;
+};
+
+struct Map2 config[] = {
+        {{KEY_CONFIG_DEVICE_ROOM}, {config_values.device_room}},
+        {{KEY_CONFIG_DEVICE_ID}, {config_values.device_id}},
+        {{KEY_CONFIG_OTA_HOST}, {config_values.ota_host}},
+        {{KEY_CONFIG_OTA_FILENAME}, {config_values.ota_filename}},
+        {{KEY_CONFIG_OTA_SERVER_USERNAME}, {config_values.ota_server_username}},
+        {{KEY_CONFIG_OTA_SERVER_PASSWORD}, {config_values.ota_server_password}},
+        {{KEY_CONFIG_WIFI_SSID}, {config_values.wifi_ssid}},
+        {{KEY_CONFIG_WIFI_PASSWORD}, {config_values.wifi_password}},
+        {{KEY_CONFIG_MQTT_USER}, {config_values.mqtt_user}},
+        {{KEY_CONFIG_MQTT_PASSWORD}, {config_values.mqtt_password}},
+        {{KEY_CONFIG_MQTT_SERVER_IP}, {config_values.mqtt_server_ip}},
+        {{KEY_CONFIG_MQTT_SERVER_PORT}, {config_values.mqtt_server_port}},
+        {{KEY_CONFIG_SENSOR_POLL_INTERVAL_MS}, {config_values.sensor_poll_interval_ms}},
+};
 
 static const char device_name[] = "Lord NimBLEer";
 static uint8_t own_addr_type;
@@ -168,11 +229,11 @@ static int gatt_svr_chr_access_rw_demo(
 
                             printf("current value for key %s: '%s'\n",
                                    map2_item->key.config_key,
-                                   map2_item->value.value);
+                                   (char*) (map2_item->value.value));
 
                             /* send given data to the client */
-                            rc = os_mbuf_append(ctxt->om, &map2_item->value.value,
-                                                strlen(map2_item->value.value));
+                            rc = os_mbuf_append(ctxt->om, map2_item->value.value,
+                                                strlen((char*) (map2_item->value.value)));
 
                             break;
 
@@ -180,20 +241,20 @@ static int gatt_svr_chr_access_rw_demo(
 
                             printf("old value for key %s: '%s'\n",
                                    map2_item->key.config_key,
-                                   map2_item->value.value);
+                                   (char*) (map2_item->value.value));
 
                             uint16_t om_len;
                             om_len = OS_MBUF_PKTLEN(ctxt->om);
 
                             /* read sent data */
-                            rc = ble_hs_mbuf_to_flat(ctxt->om, &map2_item->value.value,
+                            rc = ble_hs_mbuf_to_flat(ctxt->om, map2_item->value.value,
                                                      sizeof map2_item->value.value, &om_len);
                             /* we need to null-terminate the received string */
                             map2_item->value.value[om_len] = '\0';
 
                             printf("new value for key %s: '%s'\n",
                                    map2_item->key.config_key,
-                                   map2_item->value.value);
+                                   (char*) (map2_item->value.value));
 
                             break;
 
@@ -203,6 +264,10 @@ static int gatt_svr_chr_access_rw_demo(
                             break;
                     }
                 }
+            }
+
+            if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR) {
+                config_store(&config_values);
             }
 
             return rc;
@@ -216,6 +281,21 @@ static int gatt_svr_chr_access_rw_demo(
 int main(void)
 {
     puts("NimBLE GATT Server Example");
+
+    config_read(&config_values_tmp);
+
+    /*
+     * if device_id is an empty string, the config flash page was probably
+     * not initialized yet, because it is the first run of the application
+     */
+    if (strlen((char*) config_values_tmp.device_id) != 0) {
+        puts("override defaults with the data read from flash");
+        config_values = config_values_tmp;
+    }
+    else {
+        puts("use defaults as the flash seems to be empty "
+             "(first start -> config was never stored)");
+    }
 
     int rc = 0;
 
