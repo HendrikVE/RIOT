@@ -81,6 +81,7 @@ struct config_map_key {
 
 struct config_map_value {
     uint8_t *value;
+    int value_length;
 };
 
 struct config_map {
@@ -89,19 +90,19 @@ struct config_map {
 };
 
 struct config_map config[] = {
-        {{KEY_CONFIG_DEVICE_ROOM}, {config_values.device_room}},
-        {{KEY_CONFIG_DEVICE_ID}, {config_values.device_id}},
-        {{KEY_CONFIG_OTA_HOST}, {config_values.ota_host}},
-        {{KEY_CONFIG_OTA_FILENAME}, {config_values.ota_filename}},
-        {{KEY_CONFIG_OTA_SERVER_USERNAME}, {config_values.ota_server_username}},
-        {{KEY_CONFIG_OTA_SERVER_PASSWORD}, {config_values.ota_server_password}},
-        {{KEY_CONFIG_WIFI_SSID}, {config_values.wifi_ssid}},
-        {{KEY_CONFIG_WIFI_PASSWORD}, {config_values.wifi_password}},
-        {{KEY_CONFIG_MQTT_USER}, {config_values.mqtt_user}},
-        {{KEY_CONFIG_MQTT_PASSWORD}, {config_values.mqtt_password}},
-        {{KEY_CONFIG_MQTT_SERVER_IP}, {config_values.mqtt_server_ip}},
-        {{KEY_CONFIG_MQTT_SERVER_PORT}, {config_values.mqtt_server_port}},
-        {{KEY_CONFIG_SENSOR_POLL_INTERVAL_MS}, {config_values.sensor_poll_interval_ms}},
+        {{KEY_CONFIG_DEVICE_ROOM}, {config_values.device_room, sizeof(config_values.device_room)}},
+        {{KEY_CONFIG_DEVICE_ID}, {config_values.device_id, sizeof(config_values.device_id)}},
+        {{KEY_CONFIG_OTA_HOST}, {config_values.ota_host, sizeof(config_values.ota_host)}},
+        {{KEY_CONFIG_OTA_FILENAME}, {config_values.ota_filename, sizeof(config_values.ota_filename)}},
+        {{KEY_CONFIG_OTA_SERVER_USERNAME}, {config_values.ota_server_username, sizeof(config_values.ota_server_username)}},
+        {{KEY_CONFIG_OTA_SERVER_PASSWORD}, {config_values.ota_server_password, sizeof(config_values.ota_server_password)}},
+        {{KEY_CONFIG_WIFI_SSID}, {config_values.wifi_ssid, sizeof(config_values.wifi_ssid)}},
+        {{KEY_CONFIG_WIFI_PASSWORD}, {config_values.wifi_password, sizeof(config_values.wifi_password)}},
+        {{KEY_CONFIG_MQTT_USER}, {config_values.mqtt_user, sizeof(config_values.mqtt_user)}},
+        {{KEY_CONFIG_MQTT_PASSWORD}, {config_values.mqtt_password, sizeof(config_values.mqtt_password)}},
+        {{KEY_CONFIG_MQTT_SERVER_IP}, {config_values.mqtt_server_ip, sizeof(config_values.mqtt_server_ip)}},
+        {{KEY_CONFIG_MQTT_SERVER_PORT}, {config_values.mqtt_server_port, sizeof(config_values.mqtt_server_port)}},
+        {{KEY_CONFIG_SENSOR_POLL_INTERVAL_MS}, {config_values.sensor_poll_interval_ms, sizeof(config_values.sensor_poll_interval_ms)}},
 };
 
 static const char device_name[] = "Lord NimBLEer";
@@ -248,7 +249,7 @@ static int gatt_svr_chr_access_rw_demo(
 
                             /* read sent data */
                             rc = ble_hs_mbuf_to_flat(ctxt->om, config_map_item->value.value,
-                                                     sizeof config_map_item->value.value, &om_len);
+                                                     config_map_item->value.value_length, &om_len);
                             /* we need to null-terminate the received string */
                             config_map_item->value.value[om_len] = '\0';
 
