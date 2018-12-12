@@ -140,68 +140,73 @@ static const struct ble_gatt_svc_def gatt_svr_svcs[] = {
         .type = BLE_GATT_SVC_TYPE_PRIMARY,
         .uuid = (ble_uuid_t*) &gatt_svr_svc_cfg_uuid.u,
         .characteristics = (struct ble_gatt_chr_def[]) { {
-            /* Characteristic: Config */
+            /* Characteristic: Config device room */
             .uuid = (ble_uuid_t*) &gatt_svr_chr_cfg_device_room_uuid.u,
             .access_cb = gatt_svr_chr_access_rw_demo,
             .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE,
         },{
-            /* Characteristic: Config */
+            /* Characteristic: Config device id */
             .uuid = (ble_uuid_t*) &gatt_svr_chr_cfg_device_id_uuid.u,
             .access_cb = gatt_svr_chr_access_rw_demo,
             .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE,
         },{
-            /* Characteristic: Config */
+            /* Characteristic: Config ota host */
             .uuid = (ble_uuid_t*) &gatt_svr_chr_cfg_ota_host_uuid.u,
             .access_cb = gatt_svr_chr_access_rw_demo,
             .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE,
         },{
-            /* Characteristic: Config */
+            /* Characteristic: Config ota filename */
             .uuid = (ble_uuid_t*) &gatt_svr_chr_cfg_ota_filename_uuid.u,
             .access_cb = gatt_svr_chr_access_rw_demo,
             .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE,
         },{
-            /* Characteristic: Config */
+            /* Characteristic: Config ota server username */
             .uuid = (ble_uuid_t*) &gatt_svr_chr_cfg_ota_server_username_uuid.u,
             .access_cb = gatt_svr_chr_access_rw_demo,
             .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE,
         },{
-            /* Characteristic: Config */
+            /* Characteristic: Config ota server password */
             .uuid = (ble_uuid_t*) &gatt_svr_chr_cfg_ota_server_password_uuid.u,
             .access_cb = gatt_svr_chr_access_rw_demo,
             .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE,
         },{
-            /* Characteristic: Config */
+            /* Characteristic: Config wifi ssid */
             .uuid = (ble_uuid_t*) &gatt_svr_chr_cfg_wifi_ssid_uuid.u,
             .access_cb = gatt_svr_chr_access_rw_demo,
             .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE,
         },{
-            /* Characteristic: Config */
+            /* Characteristic: Config wifi password */
             .uuid = (ble_uuid_t*) &gatt_svr_chr_cfg_wifi_password_uuid.u,
             .access_cb = gatt_svr_chr_access_rw_demo,
             .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE,
         },{
-            /* Characteristic: Config */
+            /* Characteristic: Config mqtt user */
             .uuid = (ble_uuid_t*) &gatt_svr_chr_cfg_mqtt_user_uuid.u,
             .access_cb = gatt_svr_chr_access_rw_demo,
             .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE,
         },{
-            /* Characteristic: Config */
+            /* Characteristic: Config mqtt password */
             .uuid = (ble_uuid_t*) &gatt_svr_chr_cfg_mqtt_password_uuid.u,
             .access_cb = gatt_svr_chr_access_rw_demo,
             .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE,
         },{
-            /* Characteristic: Config */
+            /* Characteristic: Config mqtt server ip */
             .uuid = (ble_uuid_t*) &gatt_svr_chr_cfg_mqtt_server_ip_uuid.u,
             .access_cb = gatt_svr_chr_access_rw_demo,
             .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE,
         },{
-            /* Characteristic: Config */
+            /* Characteristic: Config mqtt server port */
             .uuid = (ble_uuid_t*) &gatt_svr_chr_cfg_mqtt_server_port_uuid.u,
             .access_cb = gatt_svr_chr_access_rw_demo,
             .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE,
         },{
-            /* Characteristic: Config */
+            /* Characteristic: Config sensor poll interval ms */
             .uuid = (ble_uuid_t*) &gatt_svr_chr_cfg_sensor_poll_interval_ms_uuid.u,
+            .access_cb = gatt_svr_chr_access_rw_demo,
+            .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE,
+        },{
+            /* Characteristic: Config save and restart */
+            .uuid = (ble_uuid_t*) &gatt_svr_chr_cfg_restart_uuid.u,
             .access_cb = gatt_svr_chr_access_rw_demo,
             .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE,
         },{

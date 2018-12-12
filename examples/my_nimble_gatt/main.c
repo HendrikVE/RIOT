@@ -35,6 +35,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "periph/pm.h"
 #include "host/ble_hs.h"
 #include "host/util/util.h"
 #include "host/ble_gatt.h"
@@ -210,6 +211,18 @@ static int gatt_svr_chr_access_rw_demo(
 
     int map_size2 = sizeof(config) / sizeof(config[0]);
 
+    if (ble_uuid_cmp(accessed_uuid, (ble_uuid_t*) &gatt_svr_chr_cfg_restart_uuid.u) == 0) {
+        if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR) {
+            puts("store config");
+            config_store(&config_values);
+
+            puts("restart");
+            pm_reboot();
+        }
+
+        return 0;
+    }
+
     struct ble_uuid_config_key_map *ble_uuid_config_key_map_item;
     for (int i = 0; i < map_size1; i++) {
 
@@ -265,10 +278,6 @@ static int gatt_svr_chr_access_rw_demo(
                             break;
                     }
                 }
-            }
-
-            if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR) {
-                config_store(&config_values);
             }
 
             return rc;
