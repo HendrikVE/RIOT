@@ -45,36 +45,7 @@
 #include "ble_service_uuids.h"
 #include "config.h"
 
-#define CONFIG_DEVICE_ROOM "CONFIG_DEVICE_ROOM"
-#define CONFIG_DEVICE_ID "CONFIG_DEVICE_ID"
-#define CONFIG_OTA_HOST "CONFIG_OTA_HOST"
-#define CONFIG_OTA_FILENAME "CONFIG_OTA_FILENAME"
-#define CONFIG_OTA_SERVER_USERNAME "CONFIG_OTA_SERVER_USERNAME"
-#define CONFIG_OTA_SERVER_PASSWORD "CONFIG_OTA_SERVER_PASSWORD"
-#define CONFIG_ESP_WIFI_SSID "CONFIG_ESP_WIFI_SSID"
-#define CONFIG_ESP_WIFI_PASSWORD "CONFIG_ESP_WIFI_PASSWORD"
-#define CONFIG_MQTT_USER "CONFIG_MQTT_USER"
-#define CONFIG_MQTT_PASSWORD "CONFIG_MQTT_PASSWORD"
-#define CONFIG_MQTT_SERVER_IP "CONFIG_MQTT_SERVER_IP"
-#define CONFIG_MQTT_SERVER_PORT "CONFIG_MQTT_SERVER_PORT"
-#define CONFIG_SENSOR_POLL_INTERVAL_MS "CONFIG_SENSOR_POLL_INTERVAL_MS"
-
-struct config_values config_values = {
-        .device_room = CONFIG_DEVICE_ROOM,
-        .device_id = CONFIG_DEVICE_ID,
-        .ota_host = CONFIG_OTA_HOST,
-        .ota_filename = CONFIG_OTA_FILENAME,
-        .ota_server_username = CONFIG_OTA_SERVER_USERNAME,
-        .ota_server_password = CONFIG_OTA_SERVER_PASSWORD,
-        .wifi_ssid = CONFIG_ESP_WIFI_SSID,
-        .wifi_password = CONFIG_ESP_WIFI_PASSWORD,
-        .mqtt_user = CONFIG_MQTT_USER,
-        .mqtt_password = CONFIG_MQTT_PASSWORD,
-        .mqtt_server_ip = CONFIG_MQTT_SERVER_IP,
-        .mqtt_server_port = CONFIG_MQTT_SERVER_PORT,
-        .sensor_poll_interval_ms = CONFIG_SENSOR_POLL_INTERVAL_MS
-};
-struct config_values config_values_tmp = {};
+union config_flashpage my_config_flashpage = {};
 
 struct config_map_key {
     char config_key[64];
@@ -91,19 +62,19 @@ struct config_map {
 };
 
 struct config_map config[] = {
-        {{KEY_CONFIG_DEVICE_ROOM}, {config_values.device_room, sizeof(config_values.device_room)}},
-        {{KEY_CONFIG_DEVICE_ID}, {config_values.device_id, sizeof(config_values.device_id)}},
-        {{KEY_CONFIG_OTA_HOST}, {config_values.ota_host, sizeof(config_values.ota_host)}},
-        {{KEY_CONFIG_OTA_FILENAME}, {config_values.ota_filename, sizeof(config_values.ota_filename)}},
-        {{KEY_CONFIG_OTA_SERVER_USERNAME}, {config_values.ota_server_username, sizeof(config_values.ota_server_username)}},
-        {{KEY_CONFIG_OTA_SERVER_PASSWORD}, {config_values.ota_server_password, sizeof(config_values.ota_server_password)}},
-        {{KEY_CONFIG_WIFI_SSID}, {config_values.wifi_ssid, sizeof(config_values.wifi_ssid)}},
-        {{KEY_CONFIG_WIFI_PASSWORD}, {config_values.wifi_password, sizeof(config_values.wifi_password)}},
-        {{KEY_CONFIG_MQTT_USER}, {config_values.mqtt_user, sizeof(config_values.mqtt_user)}},
-        {{KEY_CONFIG_MQTT_PASSWORD}, {config_values.mqtt_password, sizeof(config_values.mqtt_password)}},
-        {{KEY_CONFIG_MQTT_SERVER_IP}, {config_values.mqtt_server_ip, sizeof(config_values.mqtt_server_ip)}},
-        {{KEY_CONFIG_MQTT_SERVER_PORT}, {config_values.mqtt_server_port, sizeof(config_values.mqtt_server_port)}},
-        {{KEY_CONFIG_SENSOR_POLL_INTERVAL_MS}, {config_values.sensor_poll_interval_ms, sizeof(config_values.sensor_poll_interval_ms)}},
+        {{KEY_CONFIG_DEVICE_ROOM}, {my_config_flashpage.config_values.device_room, sizeof(my_config_flashpage.config_values.device_room)}},
+        {{KEY_CONFIG_DEVICE_ID}, {my_config_flashpage.config_values.device_id, sizeof(my_config_flashpage.config_values.device_id)}},
+        {{KEY_CONFIG_OTA_HOST}, {my_config_flashpage.config_values.ota_host, sizeof(my_config_flashpage.config_values.ota_host)}},
+        {{KEY_CONFIG_OTA_FILENAME}, {my_config_flashpage.config_values.ota_filename, sizeof(my_config_flashpage.config_values.ota_filename)}},
+        {{KEY_CONFIG_OTA_SERVER_USERNAME}, {my_config_flashpage.config_values.ota_server_username, sizeof(my_config_flashpage.config_values.ota_server_username)}},
+        {{KEY_CONFIG_OTA_SERVER_PASSWORD}, {my_config_flashpage.config_values.ota_server_password, sizeof(my_config_flashpage.config_values.ota_server_password)}},
+        {{KEY_CONFIG_WIFI_SSID}, {my_config_flashpage.config_values.wifi_ssid, sizeof(my_config_flashpage.config_values.wifi_ssid)}},
+        {{KEY_CONFIG_WIFI_PASSWORD}, {my_config_flashpage.config_values.wifi_password, sizeof(my_config_flashpage.config_values.wifi_password)}},
+        {{KEY_CONFIG_MQTT_USER}, {my_config_flashpage.config_values.mqtt_user, sizeof(my_config_flashpage.config_values.mqtt_user)}},
+        {{KEY_CONFIG_MQTT_PASSWORD}, {my_config_flashpage.config_values.mqtt_password, sizeof(my_config_flashpage.config_values.mqtt_password)}},
+        {{KEY_CONFIG_MQTT_SERVER_IP}, {my_config_flashpage.config_values.mqtt_server_ip, sizeof(my_config_flashpage.config_values.mqtt_server_ip)}},
+        {{KEY_CONFIG_MQTT_SERVER_PORT}, {my_config_flashpage.config_values.mqtt_server_port, sizeof(my_config_flashpage.config_values.mqtt_server_port)}},
+        {{KEY_CONFIG_SENSOR_POLL_INTERVAL_MS}, {my_config_flashpage.config_values.sensor_poll_interval_ms, sizeof(my_config_flashpage.config_values.sensor_poll_interval_ms)}},
 };
 
 static const char device_name[] = "Lord NimBLEer";
@@ -214,7 +185,7 @@ static int gatt_svr_chr_access_rw_demo(
     if (ble_uuid_cmp(accessed_uuid, (ble_uuid_t*) &gatt_svr_chr_cfg_restart_uuid.u) == 0) {
         if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR) {
             puts("store config");
-            config_store(&config_values);
+            config_store(&my_config_flashpage);
 
             puts("restart");
             pm_reboot();
@@ -288,26 +259,95 @@ static int gatt_svr_chr_access_rw_demo(
     return 1;
 }
 
+void init_default_config(void) {
+
+    memcpy(my_config_flashpage.config_values.device_room,
+           CONFIG_DEVICE_ROOM,
+           sizeof(my_config_flashpage.config_values.device_room)
+    );
+
+    memcpy(my_config_flashpage.config_values.device_id,
+           CONFIG_DEVICE_ID,
+           sizeof(my_config_flashpage.config_values.device_id)
+    );
+
+    memcpy(my_config_flashpage.config_values.ota_host,
+           CONFIG_OTA_HOST,
+           sizeof(my_config_flashpage.config_values.ota_host)
+    );
+
+    memcpy(my_config_flashpage.config_values.ota_filename,
+           CONFIG_OTA_FILENAME,
+           sizeof(my_config_flashpage.config_values.ota_filename)
+    );
+
+    memcpy(my_config_flashpage.config_values.ota_server_username,
+           CONFIG_OTA_SERVER_USERNAME,
+           sizeof(my_config_flashpage.config_values.ota_server_username)
+    );
+
+    memcpy(my_config_flashpage.config_values.ota_server_password,
+           CONFIG_OTA_SERVER_PASSWORD,
+           sizeof(my_config_flashpage.config_values.ota_server_password)
+    );
+
+    memcpy(my_config_flashpage.config_values.wifi_ssid,
+           CONFIG_ESP_WIFI_SSID,
+           sizeof(my_config_flashpage.config_values.wifi_ssid)
+    );
+
+    memcpy(my_config_flashpage.config_values.wifi_password,
+           CONFIG_ESP_WIFI_PASSWORD,
+           sizeof(my_config_flashpage.config_values.wifi_password)
+    );
+
+    memcpy(my_config_flashpage.config_values.mqtt_user,
+           CONFIG_MQTT_USER,
+           sizeof(my_config_flashpage.config_values.mqtt_user)
+    );
+
+    memcpy(my_config_flashpage.config_values.mqtt_password,
+           CONFIG_MQTT_PASSWORD,
+           sizeof(my_config_flashpage.config_values.mqtt_password)
+    );
+
+    memcpy(my_config_flashpage.config_values.mqtt_server_ip,
+           CONFIG_MQTT_SERVER_IP,
+           sizeof(my_config_flashpage.config_values.mqtt_server_ip)
+    );
+
+    memcpy(my_config_flashpage.config_values.mqtt_server_port,
+           CONFIG_MQTT_SERVER_PORT,
+           sizeof(my_config_flashpage.config_values.mqtt_server_port)
+    );
+
+    memcpy(my_config_flashpage.config_values.sensor_poll_interval_ms,
+           CONFIG_SENSOR_POLL_INTERVAL_MS,
+           sizeof(my_config_flashpage.config_values.sensor_poll_interval_ms)
+    );
+}
+
 int main(void)
 {
     puts("NimBLE GATT Server Example");
 
-    config_read(&config_values_tmp);
+    config_read(&my_config_flashpage);
 
     /*
      * if device_id is an empty string, the config flash page was probably
      * not initialized yet, because it is the first run of the application
      */
-    uint8_t first_byte = config_values_tmp.device_id[0];
+    uint8_t first_byte = my_config_flashpage.config_values.device_id[0];
 
     /* check if first ascii is within range of allowed characters */
     if (first_byte >= 32 && first_byte <= 126) {
-        puts("override defaults with the data read from flash");
-        config_values = config_values_tmp;
+        puts("use stored config from flash");
     }
     else {
         puts("use defaults as the flash seems to be empty "
              "(first start -> config was never stored)");
+
+        init_default_config();
     }
 
     int rc = 0;

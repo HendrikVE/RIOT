@@ -21,6 +21,8 @@ FEATURES_REQUIRED += periph_flashpage
 # development process:
 DEVELHELP ?= 1
 
+CFLAGS += -DDEBUG_ASSERT_VERBOSE
+
 # Change this to 0 show compiler invocation lines by default:
 QUIET ?= 1
 
