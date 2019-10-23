@@ -425,6 +425,7 @@ endif
 
 ifneq (,$(filter shell,$(USEMODULE)))
   USEMODULE += stdin
+  USEMODULE += xtimer
 endif
 
 ifneq (,$(filter stdio_ethos,$(USEMODULE)))

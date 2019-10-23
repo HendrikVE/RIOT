@@ -28,7 +28,10 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <stdlib.h>
+#include <assert.h>
+#include "xtimer.h"
 #include "shell.h"
 #include "shell_commands.h"
 
@@ -52,14 +55,36 @@ static void flush_if_needed(void)
 #endif
 }
 
+bool shell_is_locked = true;
+
+int _lock_handler(int argc, char **argv)
+{
+    (void) argc;
+    (void) argv;
+
+    shell_is_locked = true;
+
+    return 0;
+}
+
+const shell_command_t _shell_lock_command_list[] = {
+        {"lock", "lock the shell", _lock_handler},
+        {NULL, NULL, NULL}
+};
+
 static shell_command_handler_t find_handler(const shell_command_t *command_list, char *command)
 {
     const shell_command_t *command_lists[] = {
         command_list,
+        NULL,
 #ifdef MODULE_SHELL_COMMANDS
         _shell_command_list,
 #endif
     };
+
+    if (!shell_is_locked) {
+        command_lists[1] = _shell_lock_command_list;
+    }
 
     /* iterating over command_lists */
     for (unsigned int i = 0; i < ARRAY_SIZE(command_lists); i++) {
@@ -290,9 +315,183 @@ static inline void print_prompt(void)
     flush_if_needed();
 }
 
+const char user[] = "user";
+const char pass[] = "password";
+
+static bool is_line_delim(char c)
+{
+    return c == '\r' || c == '\n';
+}
+
+static bool is_line_cancel(char c)
+{
+    return c == 0x03 || c == 0x04;
+}
+
+enum LINE_TAINT {
+    LINE_OK = 0,
+    LINE_LONG = 1,
+    LINE_OK_DONE = 2,
+    LINE_LONG_DONE = 3,
+    LINE_CANCELLED = 4,
+};
+
+#define MARK_DONE(t) ((t) | LINE_OK_DONE)
+#define IS_DONE(t) ((t) & LINE_OK_DONE)
+
+/**
+ * Get a line of input, while echoing it back.
+ *
+ * The line is read to line_buf. If mask_char is not zero, then that character
+ * is echoed instead of the one inputted. EOF, ctrl-c, ctrl-d cancel the input
+ * and (-LINE_CANCELLED) is returned.
+ * Otherwise, return the number of characters read or, if the buffer size was
+ * exceeded, (-LINE_LONG).
+ *
+ * At most buf_size-1 characters will be stored, and the last character will
+ * always be a terminator.
+ *
+ * Even if the buffer size is exceeded, characters will continue to be read
+ * from the input.
+ */
+/*static int gets_echoing(char *line_buf, size_t buf_size, char mask_char)
+{
+    size_t length = 0;
+    enum LINE_TAINT state = LINE_OK;
+
+    do {
+        int c = getchar();
+
+        if (c == EOF || is_line_cancel(c)) {
+            state = LINE_CANCELLED;
+        }
+        else if (is_line_delim(c)) {
+            state = MARK_DONE(state);
+        }
+        else {
+            if (length + 1 < buf_size) {
+                line_buf[length++] = c;
+            }
+            else {
+                state = LINE_LONG;
+            }
+            putchar(mask_char != 0 ? mask_char : c);
+            flush_if_needed();
+        }
+    } while (state != LINE_CANCELLED && !IS_DONE(state));
+
+    line_buf[length++] = '\0';
+
+    return state == LINE_OK_DONE ? (int) length : (int) -state;
+}*/
+static int my_gets(char *line_buf, size_t buf_size)
+{
+    size_t length = 0;
+    enum LINE_TAINT state = LINE_OK;
+
+    do {
+        int c = getchar();
+
+        if (c == EOF || is_line_cancel(c)) {
+            state = LINE_CANCELLED;
+        }
+        else if (is_line_delim(c)) {
+            state = MARK_DONE(state);
+        }
+        else {
+            if (length + 1 < buf_size) {
+                line_buf[length++] = c;
+            }
+            else {
+                state = LINE_LONG;
+            }
+        }
+    } while (state != LINE_CANCELLED && !IS_DONE(state));
+
+    line_buf[length++] = '\0';
+
+    return state == LINE_OK_DONE ? (int) length : (int) -state;
+}
+
+enum LOGIN_STATE {
+    LOGIN_WRONG,
+    LOGIN_OK_ONE,
+    LOGIN_OK_BOTH,
+};
+
+static bool login(char *line_buf, size_t buf_size)
+{
+    int read_len;
+    int state = LOGIN_WRONG;
+
+    assert(buf_size >= sizeof(user));
+
+    printf("Username: \n");
+    flush_if_needed();
+
+    read_len = my_gets(line_buf, buf_size);
+
+    if (read_len == -LINE_CANCELLED) {
+        goto login_end;
+    }
+    else if (read_len > 0) {
+        if (strcmp(line_buf, user) == 0) state++;
+    }
+
+    printf("Password: \n");
+    flush_if_needed();
+
+    read_len = my_gets(line_buf, buf_size);
+
+    if (read_len == -LINE_CANCELLED) {
+        goto login_end;
+    }
+    else if (read_len > 0) {
+        if (strcmp(line_buf, pass) == 0) state++;
+    }
+
+    login_end:
+
+    return state == LOGIN_OK_BOTH;
+}
+
+#define N_ATTEMPTS 3
+
+/**
+ * Repeatedly prompt for the password.
+ *
+ * This function won't return until the correct password has been
+ * introduced.
+ */
+void login_barrier(char *line_buf, size_t buf_size)
+{
+    while (1) {
+        int attempts = N_ATTEMPTS;
+
+        while (attempts--) {
+            if (login(line_buf, buf_size)) {
+                return;
+            }
+            puts("Wrong user/pass");
+            xtimer_sleep(1);
+        }
+        xtimer_sleep(7);
+    }
+}
+
 void shell_run_once(const shell_command_t *shell_commands,
                     char *line_buf, int len)
 {
+    if (shell_is_locked) {
+        printf("The shell is locked. Enter a valid user/pass pair to unlock.\n"
+               "IMPORTANT: Don't forget to lock the shell after usage, "
+               "because it won't lock itself.\n\n");
+
+        login_barrier(line_buf, SHELL_DEFAULT_BUFSIZE);
+
+        shell_is_locked = false;
+    }
+
     print_prompt();
 
     while (1) {
@@ -304,6 +503,11 @@ void shell_run_once(const shell_command_t *shell_commands,
 
         if (!res) {
             handle_input_line(shell_commands, line_buf);
+        }
+
+        // check if shell was locked by _lock_handler
+        if (shell_is_locked) {
+            break;
         }
 
         print_prompt();
