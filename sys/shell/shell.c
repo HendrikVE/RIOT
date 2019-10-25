@@ -55,23 +55,6 @@ static void flush_if_needed(void)
 #endif
 }
 
-bool shell_is_locked = true;
-
-int _lock_handler(int argc, char **argv)
-{
-    (void) argc;
-    (void) argv;
-
-    shell_is_locked = true;
-
-    return 0;
-}
-
-const shell_command_t _shell_lock_command_list[] = {
-        {"lock", "lock the shell", _lock_handler},
-        {NULL, NULL, NULL}
-};
-
 static shell_command_handler_t find_handler(const shell_command_t **command_lists, int list_count, char *command)
 {
     /* iterating over command_lists */
@@ -296,8 +279,24 @@ static inline void print_prompt(void)
     flush_if_needed();
 }
 
-const char user[] = "user";
-const char pass[] = "password";
+#ifdef MODULE_SHELL_LOCK
+
+bool shell_is_locked = true;
+
+int _lock_handler(int argc, char **argv)
+{
+    (void) argc;
+    (void) argv;
+
+    shell_is_locked = true;
+
+    return 0;
+}
+
+const shell_command_t _shell_lock_command_list[] = {
+        {"lock", "lock the shell", _lock_handler},
+        {NULL, NULL, NULL}
+};
 
 static bool is_line_delim(char c)
 {
@@ -321,10 +320,9 @@ enum LINE_TAINT {
 #define IS_DONE(t) ((t) & LINE_OK_DONE)
 
 /**
- * Get a line of input, while echoing it back.
+ * Get a line of input.
  *
- * The line is read to line_buf. If mask_char is not zero, then that character
- * is echoed instead of the one inputted. EOF, ctrl-c, ctrl-d cancel the input
+ * The line is read to line_buf. EOF, ctrl-c, ctrl-d cancel the input
  * and (-LINE_CANCELLED) is returned.
  * Otherwise, return the number of characters read or, if the buffer size was
  * exceeded, (-LINE_LONG).
@@ -335,36 +333,6 @@ enum LINE_TAINT {
  * Even if the buffer size is exceeded, characters will continue to be read
  * from the input.
  */
-/*static int gets_echoing(char *line_buf, size_t buf_size, char mask_char)
-{
-    size_t length = 0;
-    enum LINE_TAINT state = LINE_OK;
-
-    do {
-        int c = getchar();
-
-        if (c == EOF || is_line_cancel(c)) {
-            state = LINE_CANCELLED;
-        }
-        else if (is_line_delim(c)) {
-            state = MARK_DONE(state);
-        }
-        else {
-            if (length + 1 < buf_size) {
-                line_buf[length++] = c;
-            }
-            else {
-                state = LINE_LONG;
-            }
-            putchar(mask_char != 0 ? mask_char : c);
-            flush_if_needed();
-        }
-    } while (state != LINE_CANCELLED && !IS_DONE(state));
-
-    line_buf[length++] = '\0';
-
-    return state == LINE_OK_DONE ? (int) length : (int) -state;
-}*/
 static int my_gets(char *line_buf, size_t buf_size)
 {
     size_t length = 0;
@@ -405,7 +373,7 @@ static bool login(char *line_buf, size_t buf_size)
     int read_len;
     int state = LOGIN_WRONG;
 
-    assert(buf_size >= sizeof(user));
+    assert(buf_size >= sizeof(SHELL_LOCK_USERNAME));
 
     printf("Username: \n");
     flush_if_needed();
@@ -416,7 +384,7 @@ static bool login(char *line_buf, size_t buf_size)
         goto login_end;
     }
     else if (read_len > 0) {
-        if (strcmp(line_buf, user) == 0) state++;
+        if (strcmp(line_buf, SHELL_LOCK_USERNAME) == 0) state++;
     }
 
     printf("Password: \n");
@@ -428,7 +396,7 @@ static bool login(char *line_buf, size_t buf_size)
         goto login_end;
     }
     else if (read_len > 0) {
-        if (strcmp(line_buf, pass) == 0) state++;
+        if (strcmp(line_buf, SHELL_LOCK_PASSWORD) == 0) state++;
     }
 
     login_end:
@@ -459,10 +427,12 @@ void login_barrier(char *line_buf, size_t buf_size)
         xtimer_sleep(7);
     }
 }
+#endif /* MODULE_SHELL_LOCK */
 
 void shell_run_once(const shell_command_t *shell_commands,
                     char *line_buf, int len)
 {
+    #ifdef MODULE_SHELL_LOCK
     if (shell_is_locked) {
         printf("The shell is locked. Enter a valid user/pass pair to unlock.\n"
                "IMPORTANT: Don't forget to lock the shell after usage, "
@@ -472,10 +442,14 @@ void shell_run_once(const shell_command_t *shell_commands,
 
         shell_is_locked = false;
     }
+    #endif /* MODULE_SHELL_LOCK */
 
     const shell_command_t *command_lists[] = {
             shell_commands,
+
+            #ifdef MODULE_SHELL_LOCK
             _shell_lock_command_list,
+            #endif
 
             #ifdef MODULE_SHELL_COMMANDS
             _shell_command_list,
@@ -495,10 +469,13 @@ void shell_run_once(const shell_command_t *shell_commands,
             handle_input_line(command_lists, ARRAY_SIZE(command_lists), line_buf);
         }
 
+
+        #ifdef MODULE_SHELL_LOCK
         // check if shell was locked by _lock_handler
         if (shell_is_locked) {
             break;
         }
+        #endif
 
         print_prompt();
     }

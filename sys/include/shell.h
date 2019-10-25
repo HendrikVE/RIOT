@@ -28,6 +28,16 @@
 extern "C" {
 #endif
 
+#ifdef MODULE_SHELL_LOCK
+    #ifndef SHELL_LOCK_USERNAME
+        #error Using MODULE_SHELL_LOCK requires defining SHELL_LOCK_USERNAME
+    #endif
+
+    #ifndef SHELL_LOCK_PASSWORD
+        #error Using MODULE_SHELL_LOCK requires defining SHELL_LOCK_PASSWORD
+    #endif
+#endif
+
 /**
  * @brief Default shell buffer size (maximum line length shell can handle)
  */
