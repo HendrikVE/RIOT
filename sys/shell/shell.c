@@ -434,11 +434,13 @@ void shell_run_once(const shell_command_t *shell_commands,
 {
     #ifdef MODULE_SHELL_LOCK
     if (shell_is_locked) {
-        printf("The shell is locked. Enter a valid user/pass pair to unlock.\n"
-               "IMPORTANT: Don't forget to lock the shell after usage, "
-               "because it won't lock itself.\n\n");
+        printf("The shell is locked. Enter a valid user/pass pair to unlock.\n\n");
 
         login_barrier(line_buf, SHELL_DEFAULT_BUFSIZE);
+
+        printf("Shell was unlocked.\n\n"
+               "IMPORTANT: Don't forget to lock the shell after usage, "
+               "because it won't lock itself.\n\n");
 
         shell_is_locked = false;
     }
