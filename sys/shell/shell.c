@@ -72,22 +72,10 @@ const shell_command_t _shell_lock_command_list[] = {
         {NULL, NULL, NULL}
 };
 
-static shell_command_handler_t find_handler(const shell_command_t *command_list, char *command)
+static shell_command_handler_t find_handler(const shell_command_t **command_lists, int list_count, char *command)
 {
-    const shell_command_t *command_lists[] = {
-        command_list,
-        NULL,
-#ifdef MODULE_SHELL_COMMANDS
-        _shell_command_list,
-#endif
-    };
-
-    if (!shell_is_locked) {
-        command_lists[1] = _shell_lock_command_list;
-    }
-
     /* iterating over command_lists */
-    for (unsigned int i = 0; i < ARRAY_SIZE(command_lists); i++) {
+    for (int i = 0; i < list_count; i++) {
 
         const shell_command_t *entry;
 
@@ -107,20 +95,13 @@ static shell_command_handler_t find_handler(const shell_command_t *command_list,
     return NULL;
 }
 
-static void print_help(const shell_command_t *command_list)
+static void print_help(const shell_command_t **command_lists, int list_count)
 {
     printf("%-20s %s\n", "Command", "Description");
     puts("---------------------------------------");
 
-    const shell_command_t *command_lists[] = {
-        command_list,
-#ifdef MODULE_SHELL_COMMANDS
-        _shell_command_list,
-#endif
-    };
-
     /* iterating over command_lists */
-    for (unsigned int i = 0; i < ARRAY_SIZE(command_lists); i++) {
+    for (int i = 0; i < list_count; i++) {
 
         const shell_command_t *entry;
 
@@ -134,7 +115,7 @@ static void print_help(const shell_command_t *command_list)
     }
 }
 
-static void handle_input_line(const shell_command_t *command_list, char *line)
+static void handle_input_line(const shell_command_t **command_list, int list_count, char *line)
 {
     static const char *INCORRECT_QUOTING = "shell: incorrect quoting";
 
@@ -238,13 +219,13 @@ static void handle_input_line(const shell_command_t *command_list, char *line)
     }
 
     /* then we call the appropriate handler */
-    shell_command_handler_t handler = find_handler(command_list, argv[0]);
+    shell_command_handler_t handler = find_handler(command_list, list_count, argv[0]);
     if (handler != NULL) {
         handler(argc, argv);
     }
     else {
         if (strcmp("help", argv[0]) == 0) {
-            print_help(command_list);
+            print_help(command_list, list_count);
         }
         else {
             printf("shell: command not found: %s\n", argv[0]);
@@ -492,6 +473,15 @@ void shell_run_once(const shell_command_t *shell_commands,
         shell_is_locked = false;
     }
 
+    const shell_command_t *command_lists[] = {
+            shell_commands,
+            _shell_lock_command_list,
+
+            #ifdef MODULE_SHELL_COMMANDS
+            _shell_command_list,
+            #endif
+    };
+
     print_prompt();
 
     while (1) {
@@ -502,7 +492,7 @@ void shell_run_once(const shell_command_t *shell_commands,
         }
 
         if (!res) {
-            handle_input_line(shell_commands, line_buf);
+            handle_input_line(command_lists, ARRAY_SIZE(command_lists), line_buf);
         }
 
         // check if shell was locked by _lock_handler
