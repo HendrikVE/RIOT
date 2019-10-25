@@ -378,6 +378,7 @@ static bool login(char *line_buf, size_t buf_size)
     printf("Username: \n");
     flush_if_needed();
 
+    print_prompt();
     read_len = my_gets(line_buf, buf_size);
 
     if (read_len == -LINE_CANCELLED) {
@@ -390,6 +391,7 @@ static bool login(char *line_buf, size_t buf_size)
     printf("Password: \n");
     flush_if_needed();
 
+    print_prompt();
     read_len = my_gets(line_buf, buf_size);
 
     if (read_len == -LINE_CANCELLED) {
