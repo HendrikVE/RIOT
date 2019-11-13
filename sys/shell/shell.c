@@ -21,6 +21,7 @@
  *
  * @author      Kaspar Schleiser <kaspar@schleiser.de>
  * @author      René Kijewski <rene.kijewski@fu-berlin.de>
+ * @author      Hendrik van Essen <hendrik.ve@fu-berlin.de>
  *
  * @}
  */
@@ -31,31 +32,84 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <assert.h>
+
 #include "xtimer.h"
+#include "thread.h"
 #include "shell.h"
 #include "shell_commands.h"
 
 #define ETX '\x03'  /** ASCII "End-of-Text", or ctrl-C */
 #if !defined(SHELL_NO_ECHO) || !defined(SHELL_NO_PROMPT)
-#ifdef MODULE_NEWLIB
-/* use local copy of putchar, as it seems to be inlined,
- * enlarging code by 50% */
-static void _putchar(int c) {
-    putchar(c);
-}
-#else
-#define _putchar putchar
+    #ifdef MODULE_NEWLIB
+        /* use local copy of putchar, as it seems to be inlined,
+         * enlarging code by 50% */
+        static void _putchar(int c) {
+            putchar(c);
+        }
+    #else
+        #define _putchar putchar
+    #endif
 #endif
+
+#ifdef MODULE_SHELL_LOCK
+    bool shell_is_locked = true;
+#endif
+
+#ifdef MODULE_SHELL_LOCK_AUTO_LOCKING
+    #ifdef SHELL_LOCK_AUTO_LOCK_TIMEOUT_MS
+        #define MAX_AUTO_LOCK_PAUSE_MS SHELL_LOCK_AUTO_LOCK_TIMEOUT_MS
+    #else
+        /* use 5 minutes as default */
+        #define MAX_AUTO_LOCK_PAUSE_MS 5 * 60 * 1000
+    #endif
+
+    #define TIMER_SLEEP_OFFSET_MS 100
+    uint64_t _timestamp_shell_auto_lock_ms = 0;
 #endif
 
 static void flush_if_needed(void)
 {
-#ifdef MODULE_NEWLIB
+    #ifdef MODULE_NEWLIB
     fflush(stdout);
-#endif
+    #endif
 }
 
-static shell_command_handler_t find_handler(const shell_command_t **command_lists, int list_count, char *command)
+#ifdef MODULE_SHELL_LOCK_AUTO_LOCKING
+char _auto_shell_lock_thread_stack[THREAD_STACKSIZE_MAIN];
+
+void *_auto_shell_lock_thread(void *arg)
+{
+    (void) arg;
+
+    while (1) {
+
+        uint32_t time_to_sleep_ms;
+
+        if (!shell_is_locked) {
+            uint64_t time_now_ms = xtimer_now_usec64() / 1000;
+
+            if (time_now_ms >= _timestamp_shell_auto_lock_ms) {
+                shell_is_locked = true;
+                break;
+            }
+            else {
+                time_to_sleep_ms = (_timestamp_shell_auto_lock_ms - time_now_ms)
+                        + TIMER_SLEEP_OFFSET_MS;
+            }
+        }
+        else {
+            time_to_sleep_ms = MAX_AUTO_LOCK_PAUSE_MS;
+        }
+
+        xtimer_usleep(time_to_sleep_ms * 1000);
+    }
+
+    return NULL;
+}
+#endif /* MODULE_SHELL_LOCK_AUTO_LOCKING */
+
+static shell_command_handler_t find_handler(
+        const shell_command_t **command_lists, int list_count, char *command)
 {
     /* iterating over command_lists */
     for (int i = 0; i < list_count; i++) {
@@ -98,7 +152,8 @@ static void print_help(const shell_command_t **command_lists, int list_count)
     }
 }
 
-static void handle_input_line(const shell_command_t **command_list, int list_count, char *line)
+static void handle_input_line(
+        const shell_command_t **command_list, int list_count, char *line)
 {
     static const char *INCORRECT_QUOTING = "shell: incorrect quoting";
 
@@ -236,10 +291,11 @@ static int readline(char *buf, size_t size)
         /* Ctrl-C cancels the current line. */
         if (c == '\r' || c == '\n' || c == ETX) {
             *line_buf_ptr = '\0';
-#ifndef SHELL_NO_ECHO
+
+            #ifndef SHELL_NO_ECHO
             _putchar('\r');
             _putchar('\n');
-#endif
+            #endif
 
             /* return 1 if line is empty, 0 otherwise */
             return c == ETX || line_buf_ptr == buf;
@@ -253,17 +309,18 @@ static int readline(char *buf, size_t size)
 
             *--line_buf_ptr = '\0';
             /* white-tape the character */
-#ifndef SHELL_NO_ECHO
+            #ifndef SHELL_NO_ECHO
             _putchar('\b');
             _putchar(' ');
             _putchar('\b');
-#endif
+            #endif
         }
         else {
             *line_buf_ptr++ = c;
-#ifndef SHELL_NO_ECHO
+
+            #ifndef SHELL_NO_ECHO
             _putchar(c);
-#endif
+            #endif
         }
         flush_if_needed();
     }
@@ -271,17 +328,15 @@ static int readline(char *buf, size_t size)
 
 static inline void print_prompt(void)
 {
-#ifndef SHELL_NO_PROMPT
+    #ifndef SHELL_NO_PROMPT
     _putchar('>');
     _putchar(' ');
-#endif
+    #endif
 
     flush_if_needed();
 }
 
 #ifdef MODULE_SHELL_LOCK
-
-bool shell_is_locked = true;
 
 int _lock_handler(int argc, char **argv)
 {
@@ -431,8 +486,16 @@ void login_barrier(char *line_buf, size_t buf_size)
 }
 #endif /* MODULE_SHELL_LOCK */
 
-void shell_run_once(const shell_command_t *shell_commands,
-                    char *line_buf, int len)
+#ifdef MODULE_SHELL_LOCK_AUTO_LOCKING
+void reset_shell_auto_lock(void)
+{
+    uint64_t time_now_ms = xtimer_now_usec64() / 1000;
+
+    _timestamp_shell_auto_lock_ms = time_now_ms + MAX_AUTO_LOCK_PAUSE_MS;
+}
+#endif
+
+void shell_run_once(const shell_command_t *shell_commands, char *line_buf, int len)
 {
     #ifdef MODULE_SHELL_LOCK
     if (shell_is_locked) {
@@ -440,12 +503,25 @@ void shell_run_once(const shell_command_t *shell_commands,
 
         login_barrier(line_buf, SHELL_DEFAULT_BUFSIZE);
 
+        #ifndef MODULE_SHELL_LOCK_AUTO_LOCKING
         printf("Shell was unlocked.\n\n"
                "IMPORTANT: Don't forget to lock the shell after usage, "
                "because it won't lock itself.\n\n");
+        #else
+        printf("Shell was unlocked.\n\n");
+        #endif
 
         shell_is_locked = false;
     }
+
+    #ifdef MODULE_SHELL_LOCK_AUTO_LOCKING
+    reset_shell_auto_lock();
+
+    thread_create(_auto_shell_lock_thread_stack, sizeof(_auto_shell_lock_thread_stack),
+              THREAD_PRIORITY_MAIN - 1, THREAD_CREATE_STACKTEST,
+              _auto_shell_lock_thread, NULL, "_auto_shell_lock_thread");
+    #endif /* MODULE_SHELL_LOCK_AUTO_LOCKING */
+
     #endif /* MODULE_SHELL_LOCK */
 
     const shell_command_t *command_lists[] = {
@@ -469,17 +545,21 @@ void shell_run_once(const shell_command_t *shell_commands,
             break;
         }
 
-        if (!res) {
-            handle_input_line(command_lists, ARRAY_SIZE(command_lists), line_buf);
-        }
-
-
         #ifdef MODULE_SHELL_LOCK
-        // check if shell was locked by _lock_handler
         if (shell_is_locked) {
             break;
         }
-        #endif
+
+        #ifdef MODULE_SHELL_LOCK_AUTO_LOCKING
+        /* reset lock countdown in case of new input */
+        reset_shell_auto_lock();
+        #endif /* MODULE_SHELL_LOCK_AUTO_LOCKING */
+
+        #endif /* MODULE_SHELL_LOCK */
+
+        if (!res) {
+            handle_input_line(command_lists, ARRAY_SIZE(command_lists), line_buf);
+        }
 
         print_prompt();
     }
