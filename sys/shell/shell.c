@@ -52,19 +52,11 @@
 #endif
 
 #ifdef MODULE_SHELL_LOCK
-    bool shell_is_locked = true;
+bool shell_is_locked = true;
 #endif
 
 #ifdef MODULE_SHELL_LOCK_AUTO_LOCKING
-    #ifdef SHELL_LOCK_AUTO_LOCK_TIMEOUT_MS
-        #define MAX_AUTO_LOCK_PAUSE_MS SHELL_LOCK_AUTO_LOCK_TIMEOUT_MS
-    #else
-        /* use 5 minutes as default */
-        #define MAX_AUTO_LOCK_PAUSE_MS 5 * 60 * 1000
-    #endif
-
-    #define TIMER_SLEEP_OFFSET_MS 100
-    uint64_t _timestamp_shell_auto_lock_ms = 0;
+uint64_t _timestamp_shell_auto_lock_ms = 0;
 #endif
 
 static void flush_if_needed(void)
@@ -461,8 +453,6 @@ static bool login(char *line_buf, size_t buf_size)
     return state == LOGIN_OK_BOTH;
 }
 
-#define N_ATTEMPTS 3
-
 /**
  * Repeatedly prompt for the password.
  *
@@ -472,7 +462,7 @@ static bool login(char *line_buf, size_t buf_size)
 void login_barrier(char *line_buf, size_t buf_size)
 {
     while (1) {
-        int attempts = N_ATTEMPTS;
+        int attempts = ATTEMPTS_BEFORE_TIME_LOCK;
 
         while (attempts--) {
             if (login(line_buf, buf_size)) {

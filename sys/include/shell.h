@@ -29,6 +29,12 @@ extern "C" {
 #endif
 
 #ifdef MODULE_SHELL_LOCK
+    /**
+     * @brief Lock the login process after given attempts of failed logins for
+     * a few seconds
+     */
+    #define ATTEMPTS_BEFORE_TIME_LOCK 3
+
     #ifndef SHELL_LOCK_USERNAME
         #error Using MODULE_SHELL_LOCK requires defining SHELL_LOCK_USERNAME
     #endif
@@ -36,6 +42,26 @@ extern "C" {
     #ifndef SHELL_LOCK_PASSWORD
         #error Using MODULE_SHELL_LOCK requires defining SHELL_LOCK_PASSWORD
     #endif
+#endif
+
+#ifdef MODULE_SHELL_LOCK_AUTO_LOCKING
+    /**
+     * @brief Lock the shell after this time span without user input
+     *        Defaults to 5 minutes and can be overwritten by defining
+     *        SHELL_LOCK_AUTO_LOCK_TIMEOUT_MS in the applications Makefile
+     */
+    #define MAX_AUTO_LOCK_PAUSE_MS 5 * 60 * 1000
+
+    #ifdef SHELL_LOCK_AUTO_LOCK_TIMEOUT_MS
+        #undef MAX_AUTO_LOCK_PAUSE_MS
+        #define MAX_AUTO_LOCK_PAUSE_MS SHELL_LOCK_AUTO_LOCK_TIMEOUT_MS
+    #endif
+
+    /**
+     * @brief Offset used for the thread for automated locking, so that the
+     *        thread is not woken up shortely before it has to lock the shell.
+     */
+    #define TIMER_SLEEP_OFFSET_MS 100
 #endif
 
 /**
