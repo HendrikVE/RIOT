@@ -35,10 +35,6 @@ extern "C" {
      */
     #define ATTEMPTS_BEFORE_TIME_LOCK 3
 
-    #ifndef SHELL_LOCK_USERNAME
-        #error Using MODULE_SHELL_LOCK requires defining SHELL_LOCK_USERNAME
-    #endif
-
     #ifndef SHELL_LOCK_PASSWORD
         #error Using MODULE_SHELL_LOCK requires defining SHELL_LOCK_PASSWORD
     #endif

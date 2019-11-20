@@ -409,31 +409,10 @@ static int my_gets(char *line_buf, size_t buf_size)
     return state == LINE_OK_DONE ? (int) length : (int) -state;
 }
 
-enum LOGIN_STATE {
-    LOGIN_WRONG,
-    LOGIN_OK_ONE,
-    LOGIN_OK_BOTH,
-};
-
 static bool login(char *line_buf, size_t buf_size)
 {
     int read_len;
-    int state = LOGIN_WRONG;
-
-    assert(buf_size >= sizeof(SHELL_LOCK_USERNAME));
-
-    printf("Username: \n");
-    flush_if_needed();
-
-    print_prompt();
-    read_len = my_gets(line_buf, buf_size);
-
-    if (read_len == -LINE_CANCELLED) {
-        goto login_end;
-    }
-    else if (read_len > 0) {
-        if (strcmp(line_buf, SHELL_LOCK_USERNAME) == 0) state++;
-    }
+    int success = false;
 
     printf("Password: \n");
     flush_if_needed();
@@ -441,16 +420,13 @@ static bool login(char *line_buf, size_t buf_size)
     print_prompt();
     read_len = my_gets(line_buf, buf_size);
 
-    if (read_len == -LINE_CANCELLED) {
-        goto login_end;
-    }
-    else if (read_len > 0) {
-        if (strcmp(line_buf, SHELL_LOCK_PASSWORD) == 0) state++;
+    if (read_len != -LINE_CANCELLED && read_len > 0) {
+        if (strcmp(line_buf, SHELL_LOCK_PASSWORD) == 0) {
+            success = true;
+        }
     }
 
-    login_end:
-
-    return state == LOGIN_OK_BOTH;
+    return success;
 }
 
 /**
@@ -468,7 +444,7 @@ void login_barrier(char *line_buf, size_t buf_size)
             if (login(line_buf, buf_size)) {
                 return;
             }
-            puts("Wrong user/pass");
+            puts("Wrong password");
             xtimer_sleep(1);
         }
         xtimer_sleep(7);
@@ -489,7 +465,7 @@ void shell_run_once(const shell_command_t *shell_commands, char *line_buf, int l
 {
     #ifdef MODULE_SHELL_LOCK
     if (shell_is_locked) {
-        printf("The shell is locked. Enter a valid user/pass pair to unlock.\n\n");
+        printf("The shell is locked. Enter a valid password to unlock.\n\n");
 
         login_barrier(line_buf, SHELL_DEFAULT_BUFSIZE);
 
