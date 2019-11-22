@@ -405,7 +405,7 @@ void shell_run_once(const shell_command_t *shell_commands, char *line_buf, int l
     if (shell_is_locked) {
         printf("The shell is locked. Enter a valid password to unlock.\n\n");
 
-        login_barrier(line_buf, SHELL_DEFAULT_BUFSIZE);
+        login_barrier(line_buf, len);
 
         #ifndef MODULE_SHELL_LOCK_AUTO_LOCKING
         printf("Shell was unlocked.\n\n"
