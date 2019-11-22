@@ -345,83 +345,21 @@ const shell_command_t _shell_lock_command_list[] = {
         {NULL, NULL, NULL}
 };
 
-static bool is_line_delim(char c)
-{
-    return c == '\r' || c == '\n';
-}
-
-static bool is_line_cancel(char c)
-{
-    return c == 0x03 || c == 0x04;
-}
-
-enum LINE_TAINT {
-    LINE_OK = 0,
-    LINE_LONG = 1,
-    LINE_OK_DONE = 2,
-    LINE_LONG_DONE = 3,
-    LINE_CANCELLED = 4,
-};
-
-#define MARK_DONE(t) ((t) | LINE_OK_DONE)
-#define IS_DONE(t) ((t) & LINE_OK_DONE)
-
-/**
- * Get a line of input.
- *
- * The line is read to line_buf. EOF, ctrl-c, ctrl-d cancel the input
- * and (-LINE_CANCELLED) is returned.
- * Otherwise, return the number of characters read or, if the buffer size was
- * exceeded, (-LINE_LONG).
- *
- * At most buf_size-1 characters will be stored, and the last character will
- * always be a terminator.
- *
- * Even if the buffer size is exceeded, characters will continue to be read
- * from the input.
- */
-static int my_gets(char *line_buf, size_t buf_size)
-{
-    size_t length = 0;
-    enum LINE_TAINT state = LINE_OK;
-
-    do {
-        int c = getchar();
-
-        if (c == EOF || is_line_cancel(c)) {
-            state = LINE_CANCELLED;
-        }
-        else if (is_line_delim(c)) {
-            state = MARK_DONE(state);
-        }
-        else {
-            if (length + 1 < buf_size) {
-                line_buf[length++] = c;
-            }
-            else {
-                state = LINE_LONG;
-            }
-        }
-    } while (state != LINE_CANCELLED && !IS_DONE(state));
-
-    line_buf[length++] = '\0';
-
-    return state == LINE_OK_DONE ? (int) length : (int) -state;
-}
-
 static bool login(char *line_buf, size_t buf_size)
 {
-    int read_len;
     int success = false;
+    char *line;
 
     printf("Password: \n");
     flush_if_needed();
 
     print_prompt();
-    read_len = my_gets(line_buf, buf_size);
 
-    if (read_len != -LINE_CANCELLED && read_len > 0) {
-        if (strcmp(line_buf, SHELL_LOCK_PASSWORD) == 0) {
+    if (fgets(line_buf, buf_size, stdin) != NULL) {
+
+        line = strtok(line_buf, "\n");
+
+        if (strcmp(line, SHELL_LOCK_PASSWORD) == 0) {
             success = true;
         }
     }
