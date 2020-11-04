@@ -1,0 +1,15 @@
+# USEPKG += wolfssl
+# USEMODULE += wolfssl
+# USEMODULE += wolfssl_socket
+
+USEMODULE += wolfmqtt
+USEMODULE += wolfmqtt_examples
+USEMODULE += wolfmqtt_contrib
+
+# Maybe in here there should be dependencies between
+# examples/contrib/examples_mqttclient handling
+#
+# Need to understand the things
+
+# USEMODULE += lwip
+# USEMODULE += lwip_netdev

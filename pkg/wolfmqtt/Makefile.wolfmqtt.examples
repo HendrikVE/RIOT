@@ -1,0 +1,6 @@
+MODULE = wolfmqtt_examples
+
+# we want to compile our mqttnet.c with RIOT specific implementations
+SRC = $(filter-out mqttnet.c, $(wildcard *.c))
+
+include $(RIOTBASE)/Makefile.base
