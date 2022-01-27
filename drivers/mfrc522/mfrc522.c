@@ -23,24 +23,6 @@
 #include "mfrc522.h"
 #include "mfrc522_regs.h"
 
-#define ENABLE_DEBUG (0)
-#include "debug.h"
-
-#define MFRC522_STATUS_CODE_NAMES_ARRAY_SIZE (MFRC522_STATUS_UNKNOWN + 1)
-
-const char mfrc522_status_code_names[MFRC522_STATUS_CODE_NAMES_ARRAY_SIZE][50] = {
-    "Success.",
-    "Error in communication.",
-    "Collision detected.",
-    "Timeout in communication.",
-    "A buffer is not big enough.",
-    "Internal error in the code. Should not happen.",
-    "Invalid argument.",
-    "The CRC_A does not match.",
-    "A MIFARE PICC responded with NAK.",
-    "Unknown status."
-};
-
 #define MFRC522_PICC_TYPE_NAMES_ARRAY_SIZE (MFRC522_PICC_TYPE_UNKNOWN + 1)
 
 const char mfrc522_picc_type_names[MFRC522_PICC_TYPE_NAMES_ARRAY_SIZE][50] = {
@@ -57,17 +39,7 @@ const char mfrc522_picc_type_names[MFRC522_PICC_TYPE_NAMES_ARRAY_SIZE][50] = {
     "Unknown type"
 };
 
-/*
- * @brief Write single byte to a given register of the device.
- *
- * @param[in] dev       Device descriptor of the MFRC522
- * @param[in] reg       Register to write to
- * @param[in] value     Byte to write#
- */
-static void _device_write(mfrc522_t *dev,
-                          mfrc522_pcd_register_t reg, uint8_t value);
-
-/*
+/**
  * @brief Write n bytes to a given register of the device.
  *
  * @param[in] dev       Device descriptor of the MFRC522
@@ -75,22 +47,48 @@ static void _device_write(mfrc522_t *dev,
  * @param[in] count     Number of bytes to write
  * @param[in] values    Bytes to write
  */
-static void _device_write_n(mfrc522_t *dev,
-                            mfrc522_pcd_register_t reg,
-                            uint8_t count,
-                            const uint8_t *values);
+static void _device_write_n(mfrc522_t *dev, mfrc522_pcd_register_t reg,
+                            uint8_t count, const uint8_t *values)
+{
+    assert(dev);
 
-/*
- * @brief Read single byte from a given register of the device.
+    spi_acquire(dev->params.spi_dev, dev->params.cs_pin, SPI_MODE_0, dev->params.spi_clk);
+
+    /* LSB always 0 and address needs to be shifted left by one. (Datasheet 8.1.2.3) */
+    reg = reg << 1;
+
+    /* MSB == 0 is for writing. LSB is not used in address. (Datasheet 8.1.2.3) */
+    CLRBIT(reg, 0x80);
+
+    /* Tell MFRC522 which address we want to write */
+    spi_transfer_byte(dev->params.spi_dev, dev->params.cs_pin, true, reg);
+
+    for (uint8_t index = 0; index < count; index++) {
+
+        bool stop = (index == count - 1) ? false : true;
+
+        spi_transfer_byte(dev->params.spi_dev, dev->params.cs_pin, stop, values[index]);
+    }
+
+    spi_release(dev->params.spi_dev);
+}
+
+/**
+ * @brief Write single byte to a given register of the device.
  *
- * @param[in] dev     Device descriptor of the MFRC522
- * @param[in] reg     Register to read from
- * @param[in] byte    uint8_t pointer to store the value in
+ * @param[in] dev       Device descriptor of the MFRC522
+ * @param[in] reg       Register to write to
+ * @param[in] value     Byte to write#
  */
-static void _device_read(mfrc522_t *dev, mfrc522_pcd_register_t reg,
-                         uint8_t *value);
+static void _device_write(mfrc522_t *dev,
+                          mfrc522_pcd_register_t reg, uint8_t value)
+{
+    assert(dev);
 
-/*
+    _device_write_n(dev, reg, 1, &value);
+}
+
+/**
  * @brief Read n bytes from a given register of the device.
  *
  * @param[in]  dev       Device descriptor of the MFRC522
@@ -99,11 +97,72 @@ static void _device_read(mfrc522_t *dev, mfrc522_pcd_register_t reg,
  * @param[out] values    Byte array to store the values in
  * @param[in]  rx_align  Only bit positions rxAlign..7 in values[0] are updated.
  */
-static void _device_read_n(mfrc522_t *dev,
-                           mfrc522_pcd_register_t reg,
-                           uint8_t count,
-                           uint8_t *values,
-                           uint8_t rx_align);
+static void _device_read_n(mfrc522_t *dev, mfrc522_pcd_register_t reg,
+                           uint8_t count, uint8_t *values,
+                           uint8_t rx_align)
+{
+    assert(dev);
+
+    if (count == 0) {
+        return;
+    }
+
+    /* last read operation is done outside the loop */
+    count -= 1;
+
+    spi_acquire(dev->params.spi_dev, dev->params.cs_pin, SPI_MODE_0, dev->params.spi_clk);
+
+    /* LSB always 0 and address needs to be shifted left by one. (Datasheet 8.1.2.3) */
+    reg = reg << 1;
+
+    /* MSB == 1 is for reading. LSB is not used in address. (Datasheet 8.1.2.3) */
+    SETBIT(reg, 0x80);
+
+    /* Tell MFRC522 which address we want to read */
+    spi_transfer_byte(dev->params.spi_dev, dev->params.cs_pin, true, reg);
+
+    /* Index in values array */
+    uint8_t index = 0;
+
+    /* Only update bit positions rx_align..7 in values[0] */
+    if (rx_align) {
+        /* Create bit mask for bit positions rx_align..7 */
+        uint8_t mask = (0xFF << rx_align) & 0xFF;
+
+        /* Read value and tell that we want to read the same address again */
+        uint8_t value = spi_transfer_byte(dev->params.spi_dev, dev->params.cs_pin, true, reg);
+
+        /* Apply mask to both current value of values[0] and the new data in value */
+        values[0] = (values[0] & ~mask) | (value & mask);
+        index++;
+    }
+
+    while (index < count) {
+        /* Read value and tell that we want to read the same address again */
+        values[index] = spi_transfer_byte(dev->params.spi_dev, dev->params.cs_pin, true, reg);
+        index++;
+    }
+
+    /* Read the final byte. Send 0 to stop reading */
+    values[count] = spi_transfer_byte(dev->params.spi_dev, dev->params.cs_pin, false, 0);
+
+    spi_release(dev->params.spi_dev);
+}
+
+/**
+ * @brief Read single byte from a given register of the device.
+ *
+ * @param[in] dev     Device descriptor of the MFRC522
+ * @param[in] reg     Register to read from
+ * @param[in] byte    uint8_t pointer to store the value in
+ */
+static void _device_read(mfrc522_t *dev, mfrc522_pcd_register_t reg,
+                         uint8_t *value)
+{
+    assert(dev);
+
+    _device_read_n(dev, reg, 1, value, 0);
+}
 
 /**
  * @brief Helper function for the two-step MIFARE Classic protocol operations
@@ -116,14 +175,46 @@ static void _device_read_n(mfrc522_t *dev,
  * @param[in] block_addr  Block (0-0xff) number
  * @param[in] data        Data to transfer in step 2
  *
- * @return MFRC522_STATUS_OK on success, MFRC522_STATUS_??? otherwise
- * @return MFRC522_STATUS_INVALID if command was not out of
- *         [MFRC522_PICC_CMD_MF_INCREMENT, MFRC522_PICC_CMD_MF_DECREMENT,
- *         MFRC522_PICC_CMD_MF_RESTORE], MFRC522_STATUS_??? otherwise
+ * @retval 0        on success
+ * @retval -EINVAL  if command was not out of [MFRC522_PICC_CMD_MF_INCREMENT,
+ *                  MFRC522_PICC_CMD_MF_DECREMENT, MFRC522_PICC_CMD_MF_RESTORE]
  */
-static mfrc522_status_code_t
-mfrc522_mifare_two_step_helper(mfrc522_t *dev, mfrc522_picc_command_t command,
-                               uint8_t block_addr, int32_t data);
+static int _mifare_two_step_helper(mfrc522_t *dev,
+                                   mfrc522_picc_command_t command,
+                                   uint8_t block_addr, int32_t data)
+{
+    assert(dev);
+
+    if (   command != MFRC522_PICC_CMD_MF_INCREMENT
+        && command != MFRC522_PICC_CMD_MF_DECREMENT
+        && command != MFRC522_PICC_CMD_MF_RESTORE) {
+        return -EINVAL;
+    }
+
+    int rc;
+
+    /* We only need room for 2 bytes */
+    uint8_t cmd_buffer[2];
+
+    /* Step 1: Tell the PICC the command and block address */
+    cmd_buffer[0] = command;
+    cmd_buffer[1] = block_addr;
+
+    /* Adds CRC_A and checks that the response is MFRC522_MF_ACK */
+    rc = mfrc522_pcd_mifare_transceive(dev, cmd_buffer, 2, false);
+    if (rc != 0) {
+        return rc;
+    }
+
+    /* Step 2: Transfer the data */
+    /* Adds CRC_A and accept timeout as success */
+    rc = mfrc522_pcd_mifare_transceive(dev, (uint8_t *)&data, 4, true);
+    if (rc != 0) {
+        return rc;
+    }
+
+    return 0;
+}
 
 void mfrc522_pcd_set_register_bitmask(mfrc522_t *dev,
                                       mfrc522_pcd_register_t reg, uint8_t mask)
@@ -137,8 +228,7 @@ void mfrc522_pcd_set_register_bitmask(mfrc522_t *dev,
     _device_write(dev, reg, tmp | mask);
 }
 
-void mfrc522_pcd_clear_register_bitmask(mfrc522_t *dev,
-                                        mfrc522_pcd_register_t reg, uint8_t mask)
+void mfrc522_pcd_clear_register_bitmask(mfrc522_t *dev, mfrc522_pcd_register_t reg, uint8_t mask)
 {
     assert(dev);
 
@@ -149,10 +239,7 @@ void mfrc522_pcd_clear_register_bitmask(mfrc522_t *dev,
     _device_write(dev, reg, tmp & (~mask));
 }
 
-mfrc522_status_code_t mfrc522_pcd_calculate_crc(mfrc522_t *dev,
-                                                const uint8_t *data,
-                                                uint8_t length,
-                                                uint8_t *result)
+int mfrc522_pcd_calculate_crc(mfrc522_t *dev, const uint8_t *data, uint8_t length, uint8_t *result)
 {
     assert(dev);
 
@@ -188,12 +275,12 @@ mfrc522_status_code_t mfrc522_pcd_calculate_crc(mfrc522_t *dev,
             _device_read(dev, MFRC522_REG_CRC_RESULT_LSB, &result[0]);
             _device_read(dev, MFRC522_REG_CRC_RESULT_MSB, &result[1]);
 
-            return MFRC522_STATUS_OK;
+            return 0;
         }
     }
 
     /* 90 ms passed and nothing happened. Communication with the MFRC522 might be down. */
-    return MFRC522_STATUS_TIMEOUT;
+    return -ETIMEDOUT;
 }
 
 int mfrc522_pcd_init(mfrc522_t *dev, const mfrc522_params_t *params)
@@ -203,10 +290,8 @@ int mfrc522_pcd_init(mfrc522_t *dev, const mfrc522_params_t *params)
 
     dev->params = *params;
 
-    int rc = 0;
-
     /* Initialize SPI bus */
-    rc = spi_init_cs(dev->params.spi_dev, dev->params.cs_pin);
+    int rc = spi_init_cs(dev->params.spi_dev, dev->params.cs_pin);
     if (rc < 0) {
         puts("error: unable to initialize the given chip select line");
         return rc;
@@ -272,7 +357,7 @@ int mfrc522_pcd_init(mfrc522_t *dev, const mfrc522_params_t *params)
     /* Enable the antenna driver pins TX1 and TX2 (they were disabled by the reset) */
     mfrc522_pcd_antenna_on(dev);
 
-    return MFRC522_STATUS_OK;
+    return 0;
 }
 
 void mfrc522_pcd_reset(mfrc522_t *dev)
@@ -392,14 +477,10 @@ void mfrc522_pcd_soft_power_up(mfrc522_t *dev)
     }
 }
 
-mfrc522_status_code_t mfrc522_pcd_transceive_data(mfrc522_t *dev,
-                                                  const uint8_t *send_data,
-                                                  uint8_t send_len,
-                                                  uint8_t *back_data,
-                                                  uint8_t *back_len,
-                                                  uint8_t *valid_bits,
-                                                  uint8_t rx_align,
-                                                  bool check_crc)
+int mfrc522_pcd_transceive_data(mfrc522_t *dev,
+                                const uint8_t *send_data, uint8_t send_len,
+                                uint8_t *back_data, uint8_t *back_len,
+                                uint8_t *valid_bits, uint8_t rx_align, bool check_crc)
 {
     assert(dev);
 
@@ -411,16 +492,11 @@ mfrc522_status_code_t mfrc522_pcd_transceive_data(mfrc522_t *dev,
                                              valid_bits, rx_align, check_crc);
 }
 
-mfrc522_status_code_t mfrc522_pcd_communicate_with_picc(mfrc522_t *dev,
-                                                        mfrc522_pcd_command_t command,
-                                                        uint8_t wait_irq,
-                                                        const uint8_t *send_data,
-                                                        uint8_t send_len,
-                                                        uint8_t *back_data,
-                                                        uint8_t *back_len,
-                                                        uint8_t *valid_bits,
-                                                        uint8_t rx_align,
-                                                        bool check_crc)
+int mfrc522_pcd_communicate_with_picc(mfrc522_t *dev, mfrc522_pcd_command_t command,
+                                      uint8_t wait_irq,
+                                      const uint8_t *send_data, uint8_t send_len,
+                                      uint8_t *back_data, uint8_t *back_len,
+                                      uint8_t *valid_bits, uint8_t rx_align, bool check_crc)
 {
     assert(dev);
 
@@ -480,13 +556,13 @@ mfrc522_status_code_t mfrc522_pcd_communicate_with_picc(mfrc522_t *dev,
 
         /* Timer interrupt - nothing received in 25ms */
         if (n & MFRC522_BIT_COM_IRQ_TIMER_IRQ) {
-            return MFRC522_STATUS_TIMEOUT;
+            return -ETIMEDOUT;
         }
     }
 
     /* 36ms and nothing happened. Communication with the MFRC522 might be down. */
     if (i == 0) {
-        return MFRC522_STATUS_TIMEOUT;
+        return -ETIMEDOUT;
     }
 
     uint8_t error_reg_value;
@@ -498,7 +574,7 @@ mfrc522_status_code_t mfrc522_pcd_communicate_with_picc(mfrc522_t *dev,
 
     /* Stop now if any errors except collisions were detected */
     if (error_reg_value & error_mask) {
-        return MFRC522_STATUS_ERROR;
+        return -EIO;
     }
 
     uint8_t _valid_bits = 0;
@@ -509,7 +585,7 @@ mfrc522_status_code_t mfrc522_pcd_communicate_with_picc(mfrc522_t *dev,
         uint8_t n;
         _device_read(dev, MFRC522_REG_FIFO_LEVEL, &n);
         if (n > *back_len) {
-            return MFRC522_STATUS_NO_ROOM;
+            return -ENOBUFS;
         }
         /* Number of bytes returned */
         *back_len = n;
@@ -529,7 +605,7 @@ mfrc522_status_code_t mfrc522_pcd_communicate_with_picc(mfrc522_t *dev,
     }
 
     if (error_reg_value & MFRC522_BIT_ERROR_COLL_ERR) {
-        return MFRC522_STATUS_COLLISION;
+        return -ECONNABORTED;
     }
 
     /* Perform CRC_A validation if requested */
@@ -537,38 +613,34 @@ mfrc522_status_code_t mfrc522_pcd_communicate_with_picc(mfrc522_t *dev,
 
         /* In this case a MIFARE Classic NAK is not OK */
         if (*back_len == 1 && _valid_bits == 4) {
-            return MFRC522_STATUS_MIFARE_NACK;
+            return -EIO;
         }
 
         /* We need at least the CRC_A value and all 8 bits of the last byte must
          * be received */
         if (*back_len < 2 || _valid_bits != 0) {
-            return MFRC522_STATUS_CRC_WRONG;
+            return -EIO;
         }
 
         /* Verify CRC_A - do our own calculation and store the control in
          * control_buffer */
         uint8_t control_buffer[2];
-        mfrc522_status_code_t status =
-            mfrc522_pcd_calculate_crc(dev, &back_data[0], *back_len - 2,
-                                      &control_buffer[0]);
 
-        if (status != MFRC522_STATUS_OK) {
-            return status;
+        int rc = mfrc522_pcd_calculate_crc(dev, &back_data[0], *back_len - 2, &control_buffer[0]);
+        if (rc != 0) {
+            return rc;
         }
 
         if ((back_data[*back_len - 2] != control_buffer[0]) ||
             (back_data[*back_len - 1] != control_buffer[1])) {
-            return MFRC522_STATUS_CRC_WRONG;
+            return -EIO;
         }
     }
 
-    return MFRC522_STATUS_OK;
+    return 0;
 }
 
-mfrc522_status_code_t mfrc522_picc_request_a(mfrc522_t *dev,
-                                             uint8_t *buffer_atqa,
-                                             uint8_t *buffer_size)
+int mfrc522_picc_request_a(mfrc522_t *dev, uint8_t *buffer_atqa, uint8_t *buffer_size)
 {
     assert(dev);
 
@@ -576,9 +648,7 @@ mfrc522_status_code_t mfrc522_picc_request_a(mfrc522_t *dev,
         dev, MFRC522_PICC_CMD_ISO_14443_REQA, buffer_atqa, buffer_size);
 }
 
-mfrc522_status_code_t mfrc522_picc_wakeup_a(mfrc522_t *dev,
-                                            uint8_t *buffer_atqa,
-                                            uint8_t *buffer_size)
+int mfrc522_picc_wakeup_a(mfrc522_t *dev, uint8_t *buffer_atqa, uint8_t *buffer_size)
 {
     assert(dev);
 
@@ -586,24 +656,22 @@ mfrc522_status_code_t mfrc522_picc_wakeup_a(mfrc522_t *dev,
         dev, MFRC522_PICC_CMD_ISO_14443_WUPA, buffer_atqa, buffer_size);
 }
 
-mfrc522_status_code_t mfrc522_picc_reqa_or_wupa(mfrc522_t *dev,
-                                                mfrc522_picc_command_t command,
-                                                uint8_t *buffer_atqa,
-                                                uint8_t *buffer_size)
+int mfrc522_picc_reqa_or_wupa(mfrc522_t *dev, mfrc522_picc_command_t command,
+                              uint8_t *buffer_atqa, uint8_t *buffer_size)
 {
     assert(dev);
 
     uint8_t valid_bits;
-    mfrc522_status_code_t status;
+    int rc;
 
     if (   command != MFRC522_PICC_CMD_ISO_14443_REQA
         && command != MFRC522_PICC_CMD_ISO_14443_WUPA) {
-        return MFRC522_STATUS_INVALID;
+        return -EINVAL;
     }
 
     /* The ATQA response is 2 bytes long */
     if (buffer_atqa == NULL || *buffer_size < 2) {
-        return MFRC522_STATUS_NO_ROOM;
+        return -ENOBUFS;
     }
 
     /* Bits received after collision are cleared */
@@ -613,31 +681,29 @@ mfrc522_status_code_t mfrc522_picc_reqa_or_wupa(mfrc522_t *dev,
     /* For REQA and WUPA we need the short frame format - transmit only 7 bits
      * of the last (and only) byte. TxLastBits = BitFramingReg[2..0] */
     valid_bits = 7;
-    status = mfrc522_pcd_transceive_data(dev, (uint8_t *)&command, 1,
-                                         buffer_atqa, buffer_size,
-                                         &valid_bits, 0, false);
 
-    if (status != MFRC522_STATUS_OK) {
-        return status;
+    rc = mfrc522_pcd_transceive_data(dev, (uint8_t *)&command, 1, buffer_atqa, buffer_size,
+                                     &valid_bits, 0, false);
+    if (rc != 0) {
+        return rc;
     }
 
     /* ATQA must be exactly 16 bits */
     if (*buffer_size != 2 || valid_bits != 0) {
-        return MFRC522_STATUS_ERROR;
+        return -EIO;
     }
 
-    return MFRC522_STATUS_OK;
+    return 0;
 }
 
-mfrc522_status_code_t mfrc522_picc_select(mfrc522_t *dev,
-                                          mfrc522_uid_t *uid, uint8_t valid_bits)
+int mfrc522_picc_select(mfrc522_t *dev, mfrc522_uid_t *uid, uint8_t valid_bits)
 {
     assert(dev);
 
+    int rc;
     bool uid_complete;
     bool use_cascade_tag;
     uint8_t cascade_level = 1;
-    mfrc522_status_code_t result;
     uint8_t count;
     uint8_t check_bit;
 
@@ -692,7 +758,7 @@ mfrc522_status_code_t mfrc522_picc_select(mfrc522_t *dev,
 
     /* Sanity check */
     if (valid_bits > 80) {
-        return MFRC522_STATUS_INVALID;
+        return -EINVAL;
     }
 
     /* Bits received after collision are cleared */
@@ -731,7 +797,7 @@ mfrc522_status_code_t mfrc522_picc_select(mfrc522_t *dev,
             break;
 
         default:
-            return MFRC522_STATUS_INTERNAL_ERROR;
+            return -ECANCELED;
             break;
         }
 
@@ -789,10 +855,9 @@ mfrc522_status_code_t mfrc522_picc_select(mfrc522_t *dev,
                 buffer[6] = buffer[2] ^ buffer[3] ^ buffer[4] ^ buffer[5];
 
                 /* Calculate CRC_A */
-                result = mfrc522_pcd_calculate_crc(dev, buffer, 7, &buffer[7]);
-
-                if (result != MFRC522_STATUS_OK) {
-                    return result;
+                rc = mfrc522_pcd_calculate_crc(dev, buffer, 7, &buffer[7]);
+                if (rc != 0) {
+                    return rc;
                 }
 
                 /* 0 => All 8 bits are valid */
@@ -829,11 +894,11 @@ mfrc522_status_code_t mfrc522_picc_select(mfrc522_t *dev,
             _device_write(dev, MFRC522_REG_BIT_FRAMING, (rx_align << 4) + tx_last_bits);
 
             /* Transmit the buffer and receive the response */
-            result = mfrc522_pcd_transceive_data(dev, buffer, buffer_used,
-                                                 response_buffer, &response_length,
-                                                 &tx_last_bits, rx_align, false);
+            rc = mfrc522_pcd_transceive_data(dev, buffer, buffer_used,
+                                             response_buffer, &response_length,
+                                             &tx_last_bits, rx_align, false);
 
-            if (result == MFRC522_STATUS_COLLISION) {
+            if (rc == -ECONNABORTED) {
                 /* More than one PICC in the field => collision */
 
                 uint8_t value_of_coll_reg;
@@ -841,7 +906,7 @@ mfrc522_status_code_t mfrc522_picc_select(mfrc522_t *dev,
 
                 if (value_of_coll_reg & MFRC522_BIT_COLL_COLL_POS_NOT_VALID) {
                     /* Without a valid collision position we cannot continue */
-                    return MFRC522_STATUS_COLLISION;
+                    return -ECONNABORTED;
                 }
 
                 /* Values 0-31, 0 means bit 32 */
@@ -852,7 +917,7 @@ mfrc522_status_code_t mfrc522_picc_select(mfrc522_t *dev,
 
                 /* No progress - should not happen */
                 if (collision_pos <= current_level_known_bits) {
-                    return MFRC522_STATUS_INTERNAL_ERROR;
+                    return -ECANCELED;
                 }
 
                 /* Choose the PICC with the bit set */
@@ -866,11 +931,11 @@ mfrc522_status_code_t mfrc522_picc_select(mfrc522_t *dev,
                 index = 1 + (current_level_known_bits / 8) + (count ? 1 : 0);
                 buffer[index] |= (1 << check_bit);
             }
-            else if (result != MFRC522_STATUS_OK) {
-                return result;
+            else if (rc != 0) {
+                return rc;
             }
             else {
-                /* MFRC522_STATUS_OK */
+                /* SUCCESS */
 
                 if (current_level_known_bits >= 32) {
                     /* This was a SELECT */
@@ -899,19 +964,18 @@ mfrc522_status_code_t mfrc522_picc_select(mfrc522_t *dev,
 
         /* SAK must be exactly 24 bits (1 byte + CRC_A) */
         if (response_length != 3 || tx_last_bits != 0) {
-            return MFRC522_STATUS_ERROR;
+            return -EIO;
         }
 
         /* Verify CRC_A - do our own calculation and store the control in
          * buffer[2..3] - those bytes are not needed anymore */
-        result = mfrc522_pcd_calculate_crc(dev, response_buffer, 1, &buffer[2]);
-
-        if (result != MFRC522_STATUS_OK) {
-            return result;
+        rc = mfrc522_pcd_calculate_crc(dev, response_buffer, 1, &buffer[2]);
+        if (rc != 0) {
+            return rc;
         }
 
         if ((buffer[2] != response_buffer[1]) || (buffer[3] != response_buffer[2])) {
-            return MFRC522_STATUS_CRC_WRONG;
+            return -EIO;
         }
 
         /* Cascade bit set - UID not complete yes*/
@@ -927,14 +991,14 @@ mfrc522_status_code_t mfrc522_picc_select(mfrc522_t *dev,
     /* Set correct uid->size */
     uid->size = 3 * cascade_level + 1;
 
-    return MFRC522_STATUS_OK;
+    return 0;
 }
 
-mfrc522_status_code_t mfrc522_picc_halt_a(mfrc522_t *dev)
+int mfrc522_picc_halt_a(mfrc522_t *dev)
 {
     assert(dev);
 
-    mfrc522_status_code_t result;
+    int rc;
     uint8_t buffer[4];
 
     /* Build command buffer */
@@ -942,34 +1006,31 @@ mfrc522_status_code_t mfrc522_picc_halt_a(mfrc522_t *dev)
     buffer[1] = 0;
 
     /* Calculate CRC_A */
-    result = mfrc522_pcd_calculate_crc(dev, buffer, 2, &buffer[2]);
-
-    if (result != MFRC522_STATUS_OK) {
-        return result;
+    rc = mfrc522_pcd_calculate_crc(dev, buffer, 2, &buffer[2]);
+    if (rc != 0) {
+        return rc;
     }
 
     /* Send the command. The standard says: If the PICC responds with any
      * modulation during a period of 1 ms after the end of the frame containing
      * the HLTA command, this response shall be interpreted as 'not acknowledge'.
-     * We interpret that this way: Only MFRC522_STATUS_TIMEOUT is a success. */
-    result = mfrc522_pcd_transceive_data(dev, buffer, sizeof(buffer), NULL, NULL, NULL, 0, false);
-    if (result == MFRC522_STATUS_TIMEOUT) {
-        return MFRC522_STATUS_OK;
+     * We interpret that this way: Only -ETIMEDOUT is a success. */
+    rc = mfrc522_pcd_transceive_data(dev, buffer, sizeof(buffer), NULL, NULL, NULL, 0, false);
+    if (rc == -ETIMEDOUT) {
+        return 0;
     }
 
     /* That is ironically NOT ok in this case ;-) */
-    if (result == MFRC522_STATUS_OK) {
-        return MFRC522_STATUS_ERROR;
+    if (rc == 0) {
+        return -EIO;
     }
 
-    return result;
+    return rc;
 }
 
-mfrc522_status_code_t mfrc522_pcd_authenticate(mfrc522_t *dev,
-                                               mfrc522_picc_command_t command,
-                                               uint8_t block_addr,
-                                               const mfrc522_mifare_key_t *key,
-                                               const mfrc522_uid_t *uid)
+int mfrc522_pcd_authenticate(mfrc522_t *dev, mfrc522_picc_command_t command,
+                             uint8_t block_addr, const mfrc522_mifare_key_t *key,
+                             const mfrc522_uid_t *uid)
 {
     assert(dev);
 
@@ -1009,18 +1070,15 @@ void mfrc522_pcd_stop_crypto1(mfrc522_t *dev)
         dev, MFRC522_REG_STATUS_2, MFRC522_BIT_STATUS_2_MF_CRYPTO_1_ON);
 }
 
-mfrc522_status_code_t mfrc522_mifare_read(mfrc522_t *dev,
-                                          uint8_t block_addr,
-                                          uint8_t *buffer,
-                                          uint8_t *buffer_size)
+int mfrc522_mifare_read(mfrc522_t *dev, uint8_t block_addr, uint8_t *buffer, uint8_t *buffer_size)
 {
     assert(dev);
 
-    mfrc522_status_code_t result;
+    int rc;
 
     /* Sanity check */
     if (buffer == NULL || *buffer_size < 18) {
-        return MFRC522_STATUS_NO_ROOM;
+        return -ENOBUFS;
     }
 
     /* Build command buffer */
@@ -1028,9 +1086,9 @@ mfrc522_status_code_t mfrc522_mifare_read(mfrc522_t *dev,
     buffer[1] = block_addr;
 
     /* Calculate CRC_A */
-    result = mfrc522_pcd_calculate_crc(dev, buffer, 2, &buffer[2]);
-    if (result != MFRC522_STATUS_OK) {
-        return result;
+    rc = mfrc522_pcd_calculate_crc(dev, buffer, 2, &buffer[2]);
+    if (rc != 0) {
+        return rc;
     }
 
     /* Transmit the buffer and receive the response, validate CRC_A */
@@ -1038,18 +1096,16 @@ mfrc522_status_code_t mfrc522_mifare_read(mfrc522_t *dev,
         dev, buffer, 4, buffer, buffer_size, NULL, 0, true);
 }
 
-mfrc522_status_code_t mfrc522_mifare_write(mfrc522_t *dev,
-                                           uint8_t block_addr,
-                                           const uint8_t *buffer,
-                                           uint8_t buffer_size)
+int mfrc522_mifare_write(mfrc522_t *dev, uint8_t block_addr,
+                         const uint8_t *buffer, uint8_t buffer_size)
 {
     assert(dev);
 
-    mfrc522_status_code_t result;
+    int rc;
 
     /* Sanity check */
     if (buffer == NULL || buffer_size < 16) {
-        return MFRC522_STATUS_INVALID;
+        return -EINVAL;
     }
 
     /* Mifare Classic protocol requires two communications to perform a write.
@@ -1059,32 +1115,30 @@ mfrc522_status_code_t mfrc522_mifare_write(mfrc522_t *dev,
     cmd_buffer[1] = block_addr;
 
     /* Adds CRC_A and checks that the response is MFRC522_MF_ACK */
-    result = mfrc522_pcd_mifare_transceive(dev, cmd_buffer, 2, false);
-    if (result != MFRC522_STATUS_OK) {
-        return result;
+    rc = mfrc522_pcd_mifare_transceive(dev, cmd_buffer, 2, false);
+    if (rc != 0) {
+        return rc;
     }
 
     /* Step 2: Transfer the data */
     /* Adds CRC_A and checks that the response is MFRC522_MF_ACK */
-    result = mfrc522_pcd_mifare_transceive(dev, buffer, buffer_size, false);
-    if (result != MFRC522_STATUS_OK) {
-        return result;
+    rc = mfrc522_pcd_mifare_transceive(dev, buffer, buffer_size, false);
+    if (rc != 0) {
+        return rc;
     }
 
-    return MFRC522_STATUS_OK;
+    return 0;
 }
 
-mfrc522_status_code_t mfrc522_mifare_ultralight_write(mfrc522_t *dev,
-                                                      uint8_t page,
-                                                      const uint8_t *buffer)
+int mfrc522_mifare_ultralight_write(mfrc522_t *dev, uint8_t page, const uint8_t *buffer)
 {
     assert(dev);
 
-    mfrc522_status_code_t result;
+    int rc;
 
     /* Sanity check */
     if (buffer == NULL) {
-        return MFRC522_STATUS_INVALID;
+        return -EINVAL;
     }
 
     /* Build command buffer */
@@ -1095,88 +1149,61 @@ mfrc522_status_code_t mfrc522_mifare_ultralight_write(mfrc522_t *dev,
 
     /* Perform the write */
     /* Adds CRC_A and checks that the response is MFRC522_MF_ACK */
-    result = mfrc522_pcd_mifare_transceive(dev, cmd_buffer, 6, false);
-    if (result != MFRC522_STATUS_OK) {
-        return result;
+    rc = mfrc522_pcd_mifare_transceive(dev, cmd_buffer, 6, false);
+    if (rc != 0) {
+        return rc;
     }
 
-    return MFRC522_STATUS_OK;
+    return 0;
 }
 
-mfrc522_status_code_t mfrc522_mifare_decrement(mfrc522_t *dev,
-                                               uint8_t block_addr,
-                                               int32_t delta)
+int mfrc522_mifare_decrement(mfrc522_t *dev, uint8_t block_addr, int32_t delta)
 {
     assert(dev);
 
-    return mfrc522_mifare_two_step_helper(
-        dev, MFRC522_PICC_CMD_MF_DECREMENT, block_addr, delta);
+    int rc = _mifare_two_step_helper(dev, MFRC522_PICC_CMD_MF_DECREMENT, block_addr, delta);
+
+    if (rc == -EINVAL) {
+        return -ECANCELED;
+    }
+
+    return rc;
 }
 
-mfrc522_status_code_t mfrc522_mifare_increment(mfrc522_t *dev,
-                                               uint8_t block_addr,
-                                               int32_t delta)
+int mfrc522_mifare_increment(mfrc522_t *dev, uint8_t block_addr, int32_t delta)
 {
     assert(dev);
 
-    return mfrc522_mifare_two_step_helper(
-        dev, MFRC522_PICC_CMD_MF_INCREMENT, block_addr, delta);
+    int rc = _mifare_two_step_helper(dev, MFRC522_PICC_CMD_MF_INCREMENT, block_addr, delta);
+
+    if (rc == -EINVAL) {
+        return -ECANCELED;
+    }
+
+    return rc;
 }
 
-mfrc522_status_code_t mfrc522_mifare_restore(mfrc522_t *dev, uint8_t block_addr)
+int mfrc522_mifare_restore(mfrc522_t *dev, uint8_t block_addr)
 {
     assert(dev);
 
     /* The datasheet describes Restore as a two step operation, but does not
      * explain what data to transfer in step 2. Doing only a single step does
      * not work, so transfer 0L in step two. */
-    return mfrc522_mifare_two_step_helper(
-        dev, MFRC522_PICC_CMD_MF_RESTORE, block_addr, 0L);
+    int rc = _mifare_two_step_helper(dev, MFRC522_PICC_CMD_MF_RESTORE, block_addr, 0L);
+
+    if (rc == -EINVAL) {
+        return -ECANCELED;
+    }
+
+    return rc;
 }
 
-static mfrc522_status_code_t mfrc522_mifare_two_step_helper(mfrc522_t *dev,
-                                                            mfrc522_picc_command_t command,
-                                                            uint8_t block_addr,
-                                                            int32_t data)
+int mfrc522_mifare_transfer(mfrc522_t *dev, uint8_t block_addr)
 {
     assert(dev);
 
-    if (   command != MFRC522_PICC_CMD_MF_INCREMENT
-        && command != MFRC522_PICC_CMD_MF_DECREMENT
-        && command != MFRC522_PICC_CMD_MF_RESTORE) {
-        return MFRC522_STATUS_INVALID;
-    }
-
-    mfrc522_status_code_t result;
-
-    /* We only need room for 2 bytes */
-    uint8_t cmd_buffer[2];
-
-    /* Step 1: Tell the PICC the command and block address */
-    cmd_buffer[0] = command;
-    cmd_buffer[1] = block_addr;
-
-    /* Adds CRC_A and checks that the response is MFRC522_MF_ACK */
-    result = mfrc522_pcd_mifare_transceive(dev, cmd_buffer, 2, false);
-    if (result != MFRC522_STATUS_OK) {
-        return result;
-    }
-
-    /* Step 2: Transfer the data */
-    /* Adds CRC_A and accept timeout as success */
-    result = mfrc522_pcd_mifare_transceive(dev, (uint8_t *)&data, 4, true);
-    if (result != MFRC522_STATUS_OK) {
-        return result;
-    }
-
-    return MFRC522_STATUS_OK;
-}
-
-mfrc522_status_code_t mfrc522_mifare_transfer(mfrc522_t *dev, uint8_t block_addr)
-{
-    assert(dev);
-
-    mfrc522_status_code_t result;
+    int rc;
 
     /* We only need room for 2 bytes */
     uint8_t cmd_buffer[2];
@@ -1186,36 +1213,36 @@ mfrc522_status_code_t mfrc522_mifare_transfer(mfrc522_t *dev, uint8_t block_addr
     cmd_buffer[1] = block_addr;
 
     /* Adds CRC_A and checks that the response is MFRC522_MF_ACK */
-    result = mfrc522_pcd_mifare_transceive(dev, cmd_buffer, 2, false);
-    if (result != MFRC522_STATUS_OK) {
-        return result;
+    rc = mfrc522_pcd_mifare_transceive(dev, cmd_buffer, 2, false);
+    if (rc != 0) {
+        return rc;
     }
 
-    return MFRC522_STATUS_OK;
+    return 0;
 }
 
-mfrc522_status_code_t mfrc522_mifare_get_value(mfrc522_t *dev,
-                                               uint8_t block_addr, int32_t *value)
+int mfrc522_mifare_get_value(mfrc522_t *dev, uint8_t block_addr, int32_t *value)
 {
     assert(dev);
 
-    mfrc522_status_code_t status;
+    int rc;
     uint8_t buffer[18];
     uint8_t size = sizeof(buffer);
 
-    status = mfrc522_mifare_read(dev, block_addr, buffer, &size);
-    if (status == MFRC522_STATUS_OK) {
+    rc = mfrc522_mifare_read(dev, block_addr, buffer, &size);
+
+    if (rc == 0) {
         /* Extract the value */
         *value = (((int32_t)buffer[3]) << 24)
                | (((int32_t)buffer[2]) << 16)
                | (((int32_t)buffer[1]) << 8)
                | ((int32_t)buffer[0]);
     }
-    return status;
+
+    return rc;
 }
 
-mfrc522_status_code_t mfrc522_mifare_set_value(mfrc522_t *dev,
-                                               uint8_t block_addr, int32_t value)
+int mfrc522_mifare_set_value(mfrc522_t *dev, uint8_t block_addr, int32_t value)
 {
     assert(dev);
 
@@ -1241,16 +1268,14 @@ mfrc522_status_code_t mfrc522_mifare_set_value(mfrc522_t *dev,
     return mfrc522_mifare_write(dev, block_addr, buffer, 16);
 }
 
-mfrc522_status_code_t mfrc522_pcd_ntag216_auth(mfrc522_t *dev,
-                                               const uint8_t *password,
-                                               uint8_t p_ack[])
+int mfrc522_pcd_ntag216_auth(mfrc522_t *dev, const uint8_t *password, uint8_t p_ack[])
 {
     assert(dev);
 
     /* TODO: Fix cmd_buffer length and rx_len. They really should match.
      * (Better still, rx_len should not even be necessary.) */
 
-    mfrc522_status_code_t result;
+    int rc;
 
     /* We need room for 16 bytes data and 2 bytes CRC_A */
     uint8_t cmd_buffer[18];
@@ -1262,10 +1287,9 @@ mfrc522_status_code_t mfrc522_pcd_ntag216_auth(mfrc522_t *dev,
         cmd_buffer[i + 1] = password[i];
     }
 
-    result = mfrc522_pcd_calculate_crc(dev, cmd_buffer, 5, &cmd_buffer[5]);
-
-    if (result != MFRC522_STATUS_OK) {
-        return result;
+    rc = mfrc522_pcd_calculate_crc(dev, cmd_buffer, 5, &cmd_buffer[5]);
+    if (rc != 0) {
+        return rc;
     }
 
     /* Transceive the data, store the reply in cmd_buffer[] */
@@ -1274,44 +1298,44 @@ mfrc522_status_code_t mfrc522_pcd_ntag216_auth(mfrc522_t *dev,
     /* uint8_t cmd_buffer_size = sizeof(cmd_buffer); */
     uint8_t valid_bits = 0;
     uint8_t rx_len = 5;
-    result = mfrc522_pcd_communicate_with_picc(
-        dev, MFRC522_CMD_TRANSCEIVE, wait_irq, cmd_buffer, 7, cmd_buffer,
-        &rx_len, &valid_bits, 0, false);
+
+    rc = mfrc522_pcd_communicate_with_picc(dev, MFRC522_CMD_TRANSCEIVE, wait_irq, cmd_buffer, 7,
+                                           cmd_buffer, &rx_len, &valid_bits, 0, false);
 
     p_ack[0] = cmd_buffer[0];
     p_ack[1] = cmd_buffer[1];
 
-    if (result != MFRC522_STATUS_OK) {
-        return result;
+    if (rc != 0) {
+        return rc;
     }
 
-    return MFRC522_STATUS_OK;
+    return 0;
 }
 
-mfrc522_status_code_t mfrc522_pcd_mifare_transceive(mfrc522_t *dev,
-                                                    const uint8_t *send_data,
-                                                    uint8_t send_len,
-                                                    bool accept_timeout)
+int mfrc522_pcd_mifare_transceive(mfrc522_t *dev,
+                                  const uint8_t *send_data, uint8_t send_len,
+                                  bool accept_timeout)
 {
     assert(dev);
 
-    mfrc522_status_code_t result;
+    int rc;
 
     /* We need room for 16 bytes data and 2 bytes CRC_A */
     uint8_t cmd_buffer[18];
 
     /* Sanity check */
     if (send_data == NULL || send_len > 16) {
-        return MFRC522_STATUS_INVALID;
+        return -EINVAL;
     }
 
     /* Copy send_data[] to cmd_buffer[] and add CRC_A */
     memcpy(cmd_buffer, send_data, send_len);
 
-    result = mfrc522_pcd_calculate_crc(dev, cmd_buffer, send_len, &cmd_buffer[send_len]);
-    if (result != MFRC522_STATUS_OK) {
-        return result;
+    rc = mfrc522_pcd_calculate_crc(dev, cmd_buffer, send_len, &cmd_buffer[send_len]);
+    if (rc != 0) {
+        return rc;
     }
+
     send_len += 2;
 
     /* Transceive the data, store the reply in cmd_buffer[] */
@@ -1319,63 +1343,28 @@ mfrc522_status_code_t mfrc522_pcd_mifare_transceive(mfrc522_t *dev,
     uint8_t cmd_buffer_size = sizeof(cmd_buffer);
     uint8_t valid_bits = 0;
 
-    result = mfrc522_pcd_communicate_with_picc(
+    rc = mfrc522_pcd_communicate_with_picc(
         dev, MFRC522_CMD_TRANSCEIVE, wait_irq, cmd_buffer, send_len,
         cmd_buffer, &cmd_buffer_size, &valid_bits, 0, false);
 
-    if (accept_timeout && result == MFRC522_STATUS_TIMEOUT) {
-        return MFRC522_STATUS_OK;
+    if (accept_timeout && rc == -ETIMEDOUT) {
+        return 0;
     }
 
-    if (result != MFRC522_STATUS_OK) {
-        return result;
+    if (rc != 0) {
+        return rc;
     }
 
     /* The PICC must reply with a 4 bit ACK */
     if (cmd_buffer_size != 1 || valid_bits != 4) {
-        return MFRC522_STATUS_ERROR;
+        return -EIO;
     }
 
     if (cmd_buffer[0] != MFRC522_MF_ACK) {
-        return MFRC522_STATUS_MIFARE_NACK;
+        return -EIO;
     }
 
-    return MFRC522_STATUS_OK;
-}
-
-const char *mfrc522_get_status_code_string(mfrc522_status_code_t code)
-{
-    switch (code) {
-    case MFRC522_STATUS_OK:
-        return mfrc522_status_code_names[MFRC522_STATUS_OK];
-
-    case MFRC522_STATUS_ERROR:
-        return mfrc522_status_code_names[MFRC522_STATUS_ERROR];
-
-    case MFRC522_STATUS_COLLISION:
-        return mfrc522_status_code_names[MFRC522_STATUS_COLLISION];
-
-    case MFRC522_STATUS_TIMEOUT:
-        return mfrc522_status_code_names[MFRC522_STATUS_TIMEOUT];
-
-    case MFRC522_STATUS_NO_ROOM:
-        return mfrc522_status_code_names[MFRC522_STATUS_NO_ROOM];
-
-    case MFRC522_STATUS_INTERNAL_ERROR:
-        return mfrc522_status_code_names[MFRC522_STATUS_INTERNAL_ERROR];
-
-    case MFRC522_STATUS_INVALID:
-        return mfrc522_status_code_names[MFRC522_STATUS_INVALID];
-
-    case MFRC522_STATUS_CRC_WRONG:
-        return mfrc522_status_code_names[MFRC522_STATUS_CRC_WRONG];
-
-    case MFRC522_STATUS_MIFARE_NACK:
-        return mfrc522_status_code_names[MFRC522_STATUS_MIFARE_NACK];
-
-    default:
-        return mfrc522_status_code_names[MFRC522_STATUS_UNKNOWN];
-    }
+    return 0;
 }
 
 mfrc522_picc_type_t mfrc522_picc_get_type(uint8_t sak)
@@ -1474,7 +1463,7 @@ void mfrc522_mifare_set_access_bits(uint8_t *access_bit_buffer,
     access_bit_buffer[2] =          c3 << 4 | c2;
 }
 
-mfrc522_status_code_t mfrc522_mifare_open_uid_backdoor(mfrc522_t *dev)
+int mfrc522_mifare_open_uid_backdoor(mfrc522_t *dev)
 {
     assert(dev);
 
@@ -1500,53 +1489,50 @@ mfrc522_status_code_t mfrc522_mifare_open_uid_backdoor(mfrc522_t *dev)
     uint8_t received = sizeof(response);
 
     /* 40 */
-    mfrc522_status_code_t status = mfrc522_pcd_transceive_data(
-        dev, &cmd, 1, response, &received, &valid_bits, 0, false);
-    if (status != MFRC522_STATUS_OK) {
-        return status;
+    int rc = mfrc522_pcd_transceive_data(dev, &cmd, 1, response, &received, &valid_bits, 0, false);
+    if (rc != 0) {
+        return rc;
     }
 
     if (received != 1 || response[0] != 0x0A) {
-        return MFRC522_STATUS_ERROR;
+        return -EIO;
     }
 
     cmd = 0x43;
     valid_bits = 8;
 
     /* 43 */
-    status = mfrc522_pcd_transceive_data(
-        dev, &cmd, 1, response, &received, &valid_bits, 0, false);
-    if (status != MFRC522_STATUS_OK) {
-        return status;
+    rc = mfrc522_pcd_transceive_data(dev, &cmd, 1, response, &received, &valid_bits, 0, false);
+    if (rc != 0) {
+        return rc;
     }
 
     if (received != 1 || response[0] != 0x0A) {
-        return MFRC522_STATUS_ERROR;
+        return -EIO;
     }
 
     /* You can now write to sector 0 without authenticating! */
-    return MFRC522_STATUS_OK;
+    return 0;
 }
 
-mfrc522_status_code_t mfrc522_mifare_set_uid(mfrc522_t *dev,
-                                             mfrc522_uid_t *uid,
-                                             const uint8_t *new_uid,
-                                             uint8_t new_uid_size)
+int mfrc522_mifare_set_uid(mfrc522_t *dev, mfrc522_uid_t *uid,
+                           const uint8_t *new_uid, uint8_t new_uid_size)
 {
     assert(dev);
 
     /* UID + BCC byte can not be larger than 15 together */
     if (!new_uid || !new_uid_size || new_uid_size > 15) {
-        return MFRC522_STATUS_INVALID;
+        return -EINVAL;
     }
 
     /* Authenticate for reading */
     mfrc522_mifare_key_t key = { .key_byte = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF } };
-    mfrc522_status_code_t status = mfrc522_pcd_authenticate(
-        dev, MFRC522_PICC_CMD_MF_AUTH_KEY_A, 1, &key, uid);
-    if (status != MFRC522_STATUS_OK) {
 
-        if (status == MFRC522_STATUS_TIMEOUT) {
+    int rc = mfrc522_pcd_authenticate(dev, MFRC522_PICC_CMD_MF_AUTH_KEY_A, 1, &key, uid);
+
+    if (rc != 0) {
+
+        if (rc == -ETIMEDOUT) {
             /* We get a read timeout if no card is selected yet, so let's select one */
 
             /* Wake the card up again if sleeping
@@ -1555,32 +1541,33 @@ mfrc522_status_code_t mfrc522_mifare_set_uid(mfrc522_t *dev,
              * mfrc522_picc_wakeup_a(atqa_answer, &atqa_size); */
 
             if (!mfrc522_picc_is_new_card_present(dev)) {
-                return MFRC522_STATUS_ERROR;
+                return -EIO;
             }
 
-            status = mfrc522_picc_read_card_serial(dev, uid);
-            if (status != MFRC522_STATUS_OK) {
-                return status;
+            rc = mfrc522_picc_read_card_serial(dev, uid);
+            if (rc != 0) {
+                return rc;
             }
 
-            status = mfrc522_pcd_authenticate(
-                dev, MFRC522_PICC_CMD_MF_AUTH_KEY_A, 1, &key, uid);
-            if (status != MFRC522_STATUS_OK) {
+            rc = mfrc522_pcd_authenticate(dev, MFRC522_PICC_CMD_MF_AUTH_KEY_A, 1, &key, uid);
+
+            if (rc != 0) {
                 /* We tried, time to give up */
-                return status;
+                return rc;
             }
         }
         else {
-            return status;
+            return rc;
         }
     }
 
     /* Read block 0 */
     uint8_t block0_buffer[18];
     uint8_t byte_count = sizeof(block0_buffer);
-    status = mfrc522_mifare_read(dev, 0, block0_buffer, &byte_count);
-    if (status != MFRC522_STATUS_OK) {
-        return status;
+
+    rc = mfrc522_mifare_read(dev, 0, block0_buffer, &byte_count);
+    if (rc != 0) {
+        return rc;
     }
 
     /* Write new UID to the data we just read, and calculate BCC byte */
@@ -1596,15 +1583,15 @@ mfrc522_status_code_t mfrc522_mifare_set_uid(mfrc522_t *dev,
     mfrc522_pcd_stop_crypto1(dev);
 
     /* Activate UID backdoor */
-    status = mfrc522_mifare_open_uid_backdoor(dev);
-    if (status != MFRC522_STATUS_OK) {
-        return status;
+    rc = mfrc522_mifare_open_uid_backdoor(dev);
+    if (rc != 0) {
+        return rc;
     }
 
     /* Write modified block 0 back to card */
-    status = mfrc522_mifare_write(dev, 0, block0_buffer, 16);
-    if (status != MFRC522_STATUS_OK) {
-        return status;
+    rc = mfrc522_mifare_write(dev, 0, block0_buffer, 16);
+    if (rc != 0) {
+        return rc;
     }
 
     /* Wake the card up again */
@@ -1612,16 +1599,16 @@ mfrc522_status_code_t mfrc522_mifare_set_uid(mfrc522_t *dev,
     uint8_t atqa_size = 2;
     mfrc522_picc_wakeup_a(dev, atqa_answer, &atqa_size);
 
-    return MFRC522_STATUS_OK;
+    return 0;
 }
 
-mfrc522_status_code_t mfrc522_mifare_unbrick_uid_sector(mfrc522_t *dev)
+int mfrc522_mifare_unbrick_uid_sector(mfrc522_t *dev)
 {
     assert(dev);
 
-    mfrc522_status_code_t status = mfrc522_mifare_open_uid_backdoor(dev);
-    if (status != MFRC522_STATUS_OK) {
-        return status;
+    int rc = mfrc522_mifare_open_uid_backdoor(dev);
+    if (rc != 0) {
+        return rc;
     }
 
     uint8_t block0_buffer[] = { 0x01, 0x02, 0x03, 0x04, 0x04, 0x08, 0x04, 0x00,
@@ -1645,115 +1632,16 @@ bool mfrc522_picc_is_new_card_present(mfrc522_t *dev)
     /* Reset ModWidthReg */
     _device_write(dev, MFRC522_REG_MOD_WIDTH, 0x26);
 
-    mfrc522_status_code_t result = mfrc522_picc_request_a(dev, buffer_ATQA, &buffer_size);
+    int rc = mfrc522_picc_request_a(dev, buffer_ATQA, &buffer_size);
 
-    return (result == MFRC522_STATUS_OK || result == MFRC522_STATUS_COLLISION);
+    return (rc == 0 || rc == -ECONNABORTED);
 }
 
-mfrc522_status_code_t mfrc522_picc_read_card_serial(mfrc522_t *dev,
-                                                    mfrc522_uid_t *uid)
+int mfrc522_picc_read_card_serial(mfrc522_t *dev, mfrc522_uid_t *uid)
 {
     assert(dev);
 
     return mfrc522_picc_select(dev, uid, 0);
-}
-
-static void _device_write(mfrc522_t *dev,
-                          mfrc522_pcd_register_t reg, uint8_t value)
-{
-    assert(dev);
-
-    _device_write_n(dev, reg, 1, &value);
-}
-
-static void _device_write_n(mfrc522_t *dev,
-                            mfrc522_pcd_register_t reg,
-                            uint8_t count,
-                            const uint8_t *values)
-{
-    assert(dev);
-
-    spi_acquire(dev->params.spi_dev, dev->params.cs_pin, SPI_MODE_0, dev->params.spi_clk);
-
-    /* LSB always 0 and address needs to be shifted left by one. (Datasheet 8.1.2.3) */
-    reg = reg << 1;
-
-    /* MSB == 0 is for writing. LSB is not used in address. (Datasheet 8.1.2.3) */
-    CLRBIT(reg, 0x80);
-
-    /* Tell MFRC522 which address we want to write */
-    spi_transfer_byte(dev->params.spi_dev, dev->params.cs_pin, true, reg);
-
-    for (uint8_t index = 0; index < count; index++) {
-
-        bool stop = (index == count - 1) ? false : true;
-
-        spi_transfer_byte(dev->params.spi_dev, dev->params.cs_pin, stop, values[index]);
-    }
-
-    spi_release(dev->params.spi_dev);
-}
-
-static void _device_read(mfrc522_t *dev, mfrc522_pcd_register_t reg,
-                         uint8_t *value)
-{
-    assert(dev);
-
-    _device_read_n(dev, reg, 1, value, 0);
-}
-
-static void _device_read_n(mfrc522_t *dev,
-                           mfrc522_pcd_register_t reg,
-                           uint8_t count,
-                           uint8_t *values,
-                           uint8_t rx_align)
-{
-    assert(dev);
-
-    if (count == 0) {
-        return;
-    }
-
-    /* last read operation is done outside the loop */
-    count -= 1;
-
-    spi_acquire(dev->params.spi_dev, dev->params.cs_pin, SPI_MODE_0, dev->params.spi_clk);
-
-    /* LSB always 0 and address needs to be shifted left by one. (Datasheet 8.1.2.3) */
-    reg = reg << 1;
-
-    /* MSB == 1 is for reading. LSB is not used in address. (Datasheet 8.1.2.3) */
-    SETBIT(reg, 0x80);
-
-    /* Tell MFRC522 which address we want to read */
-    spi_transfer_byte(dev->params.spi_dev, dev->params.cs_pin, true, reg);
-
-    /* Index in values array */
-    uint8_t index = 0;
-
-    /* Only update bit positions rx_align..7 in values[0] */
-    if (rx_align) {
-        /* Create bit mask for bit positions rx_align..7 */
-        uint8_t mask = (0xFF << rx_align) & 0xFF;
-
-        /* Read value and tell that we want to read the same address again */
-        uint8_t value = spi_transfer_byte(dev->params.spi_dev, dev->params.cs_pin, true, reg);
-
-        /* Apply mask to both current value of values[0] and the new data in value */
-        values[0] = (values[0] & ~mask) | (value & mask);
-        index++;
-    }
-
-    while (index < count) {
-        /* Read value and tell that we want to read the same address again */
-        values[index] = spi_transfer_byte(dev->params.spi_dev, dev->params.cs_pin, true, reg);
-        index++;
-    }
-
-    /* Read the final byte. Send 0 to stop reading */
-    values[count] = spi_transfer_byte(dev->params.spi_dev, dev->params.cs_pin, false, 0);
-
-    spi_release(dev->params.spi_dev);
 }
 
 void mfrc522_pcd_dump_version_to_serial(mfrc522_t *dev)
@@ -1876,8 +1764,7 @@ void mfrc522_picc_dump_details_to_serial(mfrc522_uid_t *uid)
     printf("PICC type: %s\n", mfrc522_picc_get_type_string(picc_type));
 }
 
-void mfrc522_picc_dump_mifare_classic_to_serial(mfrc522_t *dev,
-                                                mfrc522_uid_t *uid,
+void mfrc522_picc_dump_mifare_classic_to_serial(mfrc522_t *dev, mfrc522_uid_t *uid,
                                                 mfrc522_picc_type_t picc_type,
                                                 mfrc522_mifare_key_t *key)
 {
@@ -1919,14 +1806,12 @@ void mfrc522_picc_dump_mifare_classic_to_serial(mfrc522_t *dev,
     mfrc522_pcd_stop_crypto1(dev);
 }
 
-void mfrc522_picc_dump_mifare_classic_sector_to_serial(mfrc522_t *dev,
-                                                       mfrc522_uid_t *uid,
-                                                       mfrc522_mifare_key_t *key,
-                                                       uint8_t sector)
+void mfrc522_picc_dump_mifare_classic_sector_to_serial(mfrc522_t *dev, mfrc522_uid_t *uid,
+                                                       mfrc522_mifare_key_t *key, uint8_t sector)
 {
     assert(dev);
 
-    mfrc522_status_code_t status;
+    int rc;
 
     /* Address of lowest address to dump actually last block dumped */
     uint8_t first_block;
@@ -2025,20 +1910,19 @@ void mfrc522_picc_dump_mifare_classic_sector_to_serial(mfrc522_t *dev,
 
         /* Establish encrypted communications before reading the first block */
         if (is_sector_trailer) {
-            status = mfrc522_pcd_authenticate(
-                dev, MFRC522_PICC_CMD_MF_AUTH_KEY_A, first_block, key, uid);
-            if (status != MFRC522_STATUS_OK) {
-                printf("mfrc522_pcd_authenticate() failed: %s\n",
-                       mfrc522_get_status_code_string(status));
+            rc = mfrc522_pcd_authenticate(dev, MFRC522_PICC_CMD_MF_AUTH_KEY_A, first_block, key, uid);
+            if (rc != 0) {
+                printf("mfrc522_pcd_authenticate() failed: %d\n", rc);
                 return;
             }
         }
 
         /* Read block */
         byte_count = sizeof(buffer);
-        status = mfrc522_mifare_read(dev, block_addr, buffer, &byte_count);
-        if (status != MFRC522_STATUS_OK) {
-            printf("mfrc522_mifare_read() failed: %s\n", mfrc522_get_status_code_string(status));
+
+        rc = mfrc522_mifare_read(dev, block_addr, buffer, &byte_count);
+        if (rc != 0) {
+            printf("mfrc522_mifare_read() failed: %d\n", rc);
             continue;
         }
 
@@ -2119,7 +2003,7 @@ void mfrc522_picc_dump_mifare_ultralight_to_serial(mfrc522_t *dev)
 {
     assert(dev);
 
-    mfrc522_status_code_t status;
+    int rc;
     uint8_t byte_count;
     uint8_t buffer[18];
     uint8_t i;
@@ -2130,9 +2014,10 @@ void mfrc522_picc_dump_mifare_ultralight_to_serial(mfrc522_t *dev)
     for (uint8_t page = 0; page < 16; page += 4) {
         /* Read pages */
         byte_count = sizeof(buffer);
-        status = mfrc522_mifare_read(dev, page, buffer, &byte_count);
-        if (status != MFRC522_STATUS_OK) {
-            printf("mfrc522_mifare_read() failed: %s\n", mfrc522_get_status_code_string(status));
+
+        rc = mfrc522_mifare_read(dev, page, buffer, &byte_count);
+        if (rc != 0) {
+            printf("mfrc522_mifare_read() failed: %d\n", rc);
             break;
         }
 

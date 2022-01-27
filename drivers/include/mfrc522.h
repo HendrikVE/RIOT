@@ -102,22 +102,6 @@ typedef struct {
 } mfrc522_mifare_key_t;
 
 /**
- * @brief MFRC522 status codes
- */
-typedef enum {
-    MFRC522_STATUS_OK,              /**< Success */
-    MFRC522_STATUS_ERROR,           /**< Error in communication */
-    MFRC522_STATUS_COLLISION,       /**< Collision detected */
-    MFRC522_STATUS_TIMEOUT,         /**< Timeout in communication */
-    MFRC522_STATUS_NO_ROOM,         /**< A buffer is not big enough */
-    MFRC522_STATUS_INTERNAL_ERROR,  /**< Internal error in the code */
-    MFRC522_STATUS_INVALID,         /**< Invalid argument */
-    MFRC522_STATUS_CRC_WRONG,       /**< The CRC_A does not match */
-    MFRC522_STATUS_MIFARE_NACK,     /**< A MIFARE PICC responded with NAK */
-    MFRC522_STATUS_UNKNOWN          /**< Status used for mfrc522_status_code_names */
-} mfrc522_status_code_t;
-
-/**
  * @brief PICC types
  */
 typedef enum {
@@ -142,8 +126,7 @@ typedef enum {
  * @param[in] reg   Register to write to
  * @param[in] mask  Bitmask with the bits to set
  */
-void mfrc522_pcd_set_register_bitmask(mfrc522_t *dev,
-                                      mfrc522_pcd_register_t reg, uint8_t mask);
+void mfrc522_pcd_set_register_bitmask(mfrc522_t *dev, mfrc522_pcd_register_t reg, uint8_t mask);
 
 /**
  * @brief Clears the bits given in mask from register reg
@@ -152,8 +135,7 @@ void mfrc522_pcd_set_register_bitmask(mfrc522_t *dev,
  * @param[in] reg   Register to write to
  * @param[in] mask  Bitmask with the bits to clear
  */
-void mfrc522_pcd_clear_register_bitmask(mfrc522_t *dev,
-                                        mfrc522_pcd_register_t reg, uint8_t mask);
+void mfrc522_pcd_clear_register_bitmask(mfrc522_t *dev, mfrc522_pcd_register_t reg, uint8_t mask);
 
 /**
  * @brief Use the CRC coprocessor in the MFRC522 to calculate a CRC_A
@@ -164,12 +146,10 @@ void mfrc522_pcd_clear_register_bitmask(mfrc522_t *dev,
  * @param[out] result  Result buffer. Result is written to result[0..1], low
  *                     byte first.
  *
- * @return MFRC522_STATUS_OK on success, MFRC522_STATUS_??? otherwise
+ * @retval  0          on success
+ * @retval -ETIMEDOUT  on timeout
  */
-mfrc522_status_code_t mfrc522_pcd_calculate_crc(mfrc522_t *dev,
-                                                const uint8_t *data,
-                                                uint8_t length,
-                                                uint8_t *result);
+int mfrc522_pcd_calculate_crc(mfrc522_t *dev, const uint8_t *data, uint8_t length, uint8_t *result);
 
 /**
  * @brief Initialization
@@ -178,8 +158,8 @@ mfrc522_status_code_t mfrc522_pcd_calculate_crc(mfrc522_t *dev,
  * @param[in]   params  Parameters for device initialization
  *
  * @retval   0       Success
- * @retval  -ENXIO   Invalid device
  * @retval  -EINVAL  Invalid CS pin/line
+ * @retval  -ENXIO   Invalid device
  */
 int mfrc522_pcd_init(mfrc522_t *dev, const mfrc522_params_t *params);
 
@@ -262,16 +242,16 @@ void mfrc522_pcd_soft_power_up(mfrc522_t *dev);
  * @param[in]     check_crc   If true, the last two bytes of the response are
  *                            assumed to be a CRC_A that must be validated
  *
- * @return MFRC522_STATUS_OK on success, MFRC522_STATUS_??? otherwise
+ * @retval  0             on success
+ * @retval -ECONNABORTED  when a collision occurred
+ * @retval -EIO           on communication error
+ * @retval -ENOBUFS       when a buffer is too small to receive data
+ * @retval -ETIMEDOUT     on timeout
  */
-mfrc522_status_code_t mfrc522_pcd_transceive_data(mfrc522_t *dev,
-                                                  const uint8_t *send_data,
-                                                  uint8_t send_len,
-                                                  uint8_t *back_data,
-                                                  uint8_t *back_len,
-                                                  uint8_t *valid_bits,
-                                                  uint8_t rx_align,
-                                                  bool check_crc);
+int mfrc522_pcd_transceive_data(mfrc522_t *dev,
+                                const uint8_t *send_data, uint8_t send_len,
+                                uint8_t *back_data, uint8_t *back_len,
+                                uint8_t *valid_bits, uint8_t rx_align, bool check_crc);
 
 /**
  * @brief Transfers data to MFRC522's FIFO, executes a command, waits for
@@ -296,77 +276,83 @@ mfrc522_status_code_t mfrc522_pcd_transceive_data(mfrc522_t *dev,
  * @param[in]     check_crc   True => The last two bytes of the response is
  *                            assumed to be a CRC_A that must be validated
  *
- * @return MFRC522_STATUS_OK on success, MFRC522_STATUS_??? otherwise
+ * @retval  0             on success
+ * @retval -ECONNABORTED  when a collision occurred
+ * @retval -EIO           on communication error
+ * @retval -ENOBUFS       when a buffer is too small to receive data
+ * @retval -ETIMEDOUT     on timeout
  */
-mfrc522_status_code_t mfrc522_pcd_communicate_with_picc(mfrc522_t *dev,
-                                                        mfrc522_pcd_command_t command,
-                                                        uint8_t wait_irq,
-                                                        const uint8_t *send_data,
-                                                        uint8_t send_len,
-                                                        uint8_t *back_data,
-                                                        uint8_t *back_len,
-                                                        uint8_t *valid_bits,
-                                                        uint8_t rx_align,
-                                                        bool check_crc);
+int mfrc522_pcd_communicate_with_picc(mfrc522_t *dev, mfrc522_pcd_command_t command,
+                                      uint8_t wait_irq,
+                                      const uint8_t *send_data, uint8_t send_len,
+                                      uint8_t *back_data, uint8_t *back_len,
+                                      uint8_t *valid_bits, uint8_t rx_align, bool check_crc);
 
 /**
  * @brief Transmits REQA, Type A. Invites PICCs in state IDLE to go to READY and
  *        prepare for anti-collision or selection. 7 bit frame.
  *
  * @note  When two PICCs are in the field at the same time we often get
- *        MFRC522_STATUS_TIMEOUT - probably due do bad antenna design.
+ *        -ETIMEDOUT - probably due do bad antenna design.
  *
  * @param[in]      dev          Device descriptor of the MFRC522
  * @param[out]     buffer_atqa  Buffer to store the ATQA in
  * @param[inout]   buffer_size  Buffer size, at least two bytes. Also number of
- *                              bytes returned if MFRC522_STATUS_OK.
+ *                              bytes returned on success.
  *
- * @return MFRC522_STATUS_OK on success, MFRC522_STATUS_??? otherwise
+ * @retval  0             on success
+ * @retval -ECONNABORTED  when a collision occurred
+ * @retval -EINVAL        on invalid argument
+ * @retval -EIO           on communication error
+ * @retval -ENOBUFS       when a buffer is too small to receive data
+ * @retval -ETIMEDOUT     on timeout
  */
-mfrc522_status_code_t mfrc522_picc_request_a(mfrc522_t *dev,
-                                             uint8_t *buffer_atqa,
-                                             uint8_t *buffer_size);
+int mfrc522_picc_request_a(mfrc522_t *dev, uint8_t *buffer_atqa, uint8_t *buffer_size);
 
 /**
  * @brief Transmits WUPA, Type A. Invites PICCs in state IDLE and HALT to go to
  *        READY(*) and prepare for anti-collision or selection. 7 bit frame.
  *
  * @note  When two PICCs are in the field at the same time we often get
- *        MFRC522_STATUS_TIMEOUT - probably due do bad antenna design.
+ *        -ETIMEDOUT - probably due do bad antenna design.
  *
  * @param[in]      dev          Device descriptor of the MFRC522
  * @param[out]     buffer_atqa  Buffer to store the ATQA in
  * @param[inout]   buffer_size  Buffer size, at least two bytes. Also number of
- *                              bytes returned if MFRC522_STATUS_OK.
+ *                              bytes returned on success.
  *
- * @return MFRC522_STATUS_OK on success, MFRC522_STATUS_??? otherwise
+ * @retval  0             on success
+ * @retval -ECONNABORTED  when a collision occurred
+ * @retval -EINVAL        on invalid argument
+ * @retval -EIO           on communication error
+ * @retval -ENOBUFS       when a buffer is too small to receive data
+ * @retval -ETIMEDOUT     on timeout
  */
-mfrc522_status_code_t mfrc522_picc_wakeup_a(mfrc522_t *dev,
-                                            uint8_t *buffer_atqa,
-                                            uint8_t *buffer_size);
+int mfrc522_picc_wakeup_a(mfrc522_t *dev, uint8_t *buffer_atqa, uint8_t *buffer_size);
 
 /**
  * @brief Transmits REQA (Type A) or WUPA (Type A) commands
  *
  * @note  When two PICCs are in the field at the same time we often get
- *        MFRC522_STATUS_TIMEOUT - probably due do bad antenna design.
+ *        -ETIMEDOUT - probably due do bad antenna design.
  *
  * @param[in]     dev          Device descriptor of the MFRC522
  * @param[in]     command      Command to send - MFRC522_PICC_CMD_ISO_14443_REQA
  *                             or MFRC522_PICC_CMD_ISO_14443_WUPA
  * @param[out]    buffer_atqa  Buffer to store the ATQA in
  * @param[inout]  buffer_size  Buffer size, at least two bytes. Also number of
- *                             bytes returned if MFRC522_STATUS_OK.
+ *                             bytes returned on success.
  *
- * @return MFRC522_STATUS_OK on success
- * @return MFRC522_STATUS_INVALID if command was neither
- *         MFRC522_PICC_CMD_ISO_14443_REQA nor MFRC522_PICC_CMD_ISO_14443_WUPA,
- *         MFRC522_STATUS_??? otherwise
+ * @retval  0             on success
+ * @retval -ECONNABORTED  when a collision occurred
+ * @retval -EINVAL        if command was neither MFRC522_PICC_CMD_ISO_14443_REQA nor
+ *                        MFRC522_PICC_CMD_ISO_14443_WUPA
+ * @retval -EIO           on communication error
+ * @retval -ENOBUFS       when a buffer is too small to receive data
+ * @retval -ETIMEDOUT     on timeout
  */
-mfrc522_status_code_t mfrc522_picc_reqa_or_wupa(mfrc522_t *dev,
-                                                mfrc522_picc_command_t command,
-                                                uint8_t *buffer_atqa,
-                                                uint8_t *buffer_size);
+int mfrc522_picc_reqa_or_wupa(mfrc522_t *dev, mfrc522_picc_command_t command,
+                              uint8_t *buffer_atqa, uint8_t *buffer_size);
 
 /**
  * @brief Transmits SELECT/ANTICOLLISION commands to select a single PICC
@@ -395,19 +381,26 @@ mfrc522_status_code_t mfrc522_picc_reqa_or_wupa(mfrc522_t *dev,
  * @param[in]     valid_bits  Number of known UID bits supplied in *uid.
  *                            Normally 0. If set you must also supply uid->size.
  *
- * @return MFRC522_STATUS_OK on success, MFRC522_STATUS_??? otherwise
+ * @retval  0             on success
+ * @retval -ECANCELED     on internal error
+ * @retval -ECONNABORTED  when a collision occurred
+ * @retval -EINVAL        on invalid argument
+ * @retval -EIO           on communication error
+ * @retval -ENOBUFS       when a buffer is too small to receive data
+ * @retval -ETIMEDOUT     on timeout
  */
-mfrc522_status_code_t mfrc522_picc_select(mfrc522_t *dev,
-                                          mfrc522_uid_t *uid, uint8_t valid_bits);
+int mfrc522_picc_select(mfrc522_t *dev, mfrc522_uid_t *uid, uint8_t valid_bits);
 
 /**
  * @brief Instructs a PICC in state ACTIVE(*) to go to state HALT
  *
  * @param[in] dev  Device descriptor of the MFRC522
  *
- * @return MFRC522_STATUS_OK on success, MFRC522_STATUS_??? otherwise
+ * @retval  0          on success
+ * @retval -EIO        on communication error
+ * @retval -ETIMEDOUT  on timeout
  */
-mfrc522_status_code_t mfrc522_picc_halt_a(mfrc522_t *dev);
+int mfrc522_picc_halt_a(mfrc522_t *dev);
 
 /**
  * @brief Executes the MFRC522 MFAuthent command
@@ -429,13 +422,15 @@ mfrc522_status_code_t mfrc522_picc_halt_a(mfrc522_t *dev);
  * @param[in] key         Crypteo1 key to use (6 bytes)
  * @param[in] uid         PICC's UID
  *
- * @return MFRC522_STATUS_OK on success, MFRC522_STATUS_??? otherwise
+ * @retval  0             on success
+ * @retval -ECONNABORTED  when a collision occurred
+ * @retval -EIO           on communication error
+ * @retval -ENOBUFS       when a buffer is too small to receive data
+ * @retval -ETIMEDOUT     on timeout
  */
-mfrc522_status_code_t mfrc522_pcd_authenticate(mfrc522_t *dev,
-                                               mfrc522_picc_command_t command,
-                                               uint8_t block_addr,
-                                               const mfrc522_mifare_key_t *key,
-                                               const mfrc522_uid_t *uid);
+int mfrc522_pcd_authenticate(mfrc522_t *dev, mfrc522_picc_command_t command,
+                             uint8_t block_addr, const mfrc522_mifare_key_t *key,
+                             const mfrc522_uid_t *uid);
 
 /**
  * @brief Used to exit the PCD from its authenticated state
@@ -461,21 +456,22 @@ void mfrc522_pcd_stop_crypto1(mfrc522_t *dev);
  * of pages 0Eh, 0Fh, 00h and 01h are returned.
  *
  * The buffer must be at least 18 bytes because a CRC_A is also returned.
- * Checks the CRC_A before returning MFRC522_STATUS_OK.
+ * Checks the CRC_A before returning.
  *
  * @param[in]      dev          Device descriptor of the MFRC522
  * @param[in]      block_addr   MIFARE Classic: The block (0-0xff) number.
  *                              MIFARE Ultralight: The first page to return data from.
  * @param[out]     buffer       Buffer to store the data in
  * @param[inout]   buffer_size  Buffer size, at least 18 bytes. Also number of
- *                              bytes returned if MFRC522_STATUS_OK.
+ *                              bytes returned on success.
  *
- * @return MFRC522_STATUS_OK on success, MFRC522_STATUS_??? otherwise
+ * @retval  0             on success
+ * @retval -ECONNABORTED  when a collision occurred
+ * @retval -EIO           on communication error
+ * @retval -ENOBUFS       when a buffer is too small to receive data
+ * @retval -ETIMEDOUT     on timeout
  */
-mfrc522_status_code_t mfrc522_mifare_read(mfrc522_t *dev,
-                                          uint8_t block_addr,
-                                          uint8_t *buffer,
-                                          uint8_t *buffer_size);
+int mfrc522_mifare_read(mfrc522_t *dev, uint8_t block_addr, uint8_t *buffer, uint8_t *buffer_size);
 
 /**
  * @brief Write 16 bytes to the active PICC
@@ -495,12 +491,15 @@ mfrc522_status_code_t mfrc522_mifare_read(mfrc522_t *dev,
  * @param[in] buffer_size  Buffer size, must be at least 16 bytes. Exactly 16
  *                         bytes are written.
  *
- * @return MFRC522_STATUS_OK on success, MFRC522_STATUS_??? otherwise
+ * @retval  0             on success
+ * @retval -ECONNABORTED  when a collision occurred
+ * @retval -EINVAL        on invalid argument
+ * @retval -EIO           on communication error
+ * @retval -ENOBUFS       when a buffer is too small to receive data
+ * @retval -ETIMEDOUT     on timeout
  */
-mfrc522_status_code_t mfrc522_mifare_write(mfrc522_t *dev,
-                                           uint8_t block_addr,
-                                           const uint8_t *buffer,
-                                           uint8_t buffer_size);
+int mfrc522_mifare_write(mfrc522_t *dev, uint8_t block_addr,
+                         const uint8_t *buffer, uint8_t buffer_size);
 
 /**
  * @brief Write a 4 byte page to the active MIFARE Ultralight PICC
@@ -509,11 +508,14 @@ mfrc522_status_code_t mfrc522_mifare_write(mfrc522_t *dev,
  * @param[in] page         The page (2-15) to write to
  * @param[in] buffer       The 4 bytes to write to the PICC
  *
- * @return MFRC522_STATUS_OK on success, MFRC522_STATUS_??? otherwise
+ * @retval  0             on success
+ * @retval -ECONNABORTED  when a collision occurred
+ * @retval -EINVAL        on invalid argument
+ * @retval -EIO           on communication error
+ * @retval -ENOBUFS       when a buffer is too small to receive data
+ * @retval -ETIMEDOUT     on timeout
  */
-mfrc522_status_code_t mfrc522_mifare_ultralight_write(mfrc522_t *dev,
-                                                      uint8_t page,
-                                                      const uint8_t *buffer);
+int mfrc522_mifare_ultralight_write(mfrc522_t *dev, uint8_t page, const uint8_t *buffer);
 
 /**
  * @brief Subtract the operand from the value of the addressed block, and store
@@ -530,11 +532,10 @@ mfrc522_status_code_t mfrc522_mifare_ultralight_write(mfrc522_t *dev,
  * @param[in] block_addr  Block (0-0xff) number
  * @param[in] delta       Number to be subtracted from the value of block block_addr
  *
- * @return MFRC522_STATUS_OK on success, MFRC522_STATUS_??? otherwise
+ * @retval  0          on success
+ * @retval -ECANCELED  on internal error
  */
-mfrc522_status_code_t mfrc522_mifare_decrement(mfrc522_t *dev,
-                                               uint8_t block_addr,
-                                               int32_t delta);
+int mfrc522_mifare_decrement(mfrc522_t *dev, uint8_t block_addr, int32_t delta);
 
 /**
  * @brief Add the operand to the value of the addressed block, and store the
@@ -550,11 +551,10 @@ mfrc522_status_code_t mfrc522_mifare_decrement(mfrc522_t *dev,
  * @param[in] block_addr  Block (0-0xff) number
  * @param[in] delta       Number to be added to the value of block block_addr
  *
- * @return MFRC522_STATUS_OK on success, MFRC522_STATUS_??? otherwise
+ * @retval  0          on success
+ * @retval -ECANCELED  on internal error
  */
-mfrc522_status_code_t mfrc522_mifare_increment(mfrc522_t *dev,
-                                               uint8_t block_addr,
-                                               int32_t delta);
+int mfrc522_mifare_increment(mfrc522_t *dev, uint8_t block_addr, int32_t delta);
 
 /**
  * @brief Copies the value of the addressed block into the Transfer Buffer
@@ -568,9 +568,10 @@ mfrc522_status_code_t mfrc522_mifare_increment(mfrc522_t *dev,
  * @param[in] dev         Device descriptor of the MFRC522
  * @param[in] block_addr  Block (0-0xff) number
  *
- * @return MFRC522_STATUS_OK on success, MFRC522_STATUS_??? otherwise
+ * @retval  0          on success
+ * @retval -ECANCELED  on internal error
  */
-mfrc522_status_code_t mfrc522_mifare_restore(mfrc522_t *dev, uint8_t block_addr);
+int mfrc522_mifare_restore(mfrc522_t *dev, uint8_t block_addr);
 
 /**
  * @brief Write the value from the Transfer Buffer into destination block
@@ -583,9 +584,14 @@ mfrc522_status_code_t mfrc522_mifare_restore(mfrc522_t *dev, uint8_t block_addr)
  * @param[in] dev         Device descriptor of the MFRC522
  * @param[in] block_addr  Block (0-0xff) number
  *
- * @return MFRC522_STATUS_OK on success, MFRC522_STATUS_??? otherwise
+ * @retval  0             on success
+ * @retval -ECONNABORTED  when a collision occurred
+ * @retval -EINVAL        on invalid argument
+ * @retval -EIO           on communication error
+ * @retval -ENOBUFS       when a buffer is too small to receive data
+ * @retval -ETIMEDOUT     on timeout
  */
-mfrc522_status_code_t mfrc522_mifare_transfer(mfrc522_t *dev, uint8_t block_addr);
+int mfrc522_mifare_transfer(mfrc522_t *dev, uint8_t block_addr);
 
 /**
  * @brief Helper routine to read the current value from a Value Block
@@ -598,10 +604,13 @@ mfrc522_status_code_t mfrc522_mifare_transfer(mfrc522_t *dev, uint8_t block_addr
  * @param[in]  block_addr  Block (0x00-0xff) number
  * @param[out] value       Current value of the Value Block
  *
- * @return MFRC522_STATUS_OK on success, MFRC522_STATUS_??? otherwise
+ * @retval  0             on success
+ * @retval -ECONNABORTED  when a collision occurred
+ * @retval -EIO           on communication error
+ * @retval -ENOBUFS       when a buffer is too small to receive data
+ * @retval -ETIMEDOUT     on timeout
  */
-mfrc522_status_code_t mfrc522_mifare_get_value(mfrc522_t *dev,
-                                               uint8_t block_addr, int32_t *value);
+int mfrc522_mifare_get_value(mfrc522_t *dev, uint8_t block_addr, int32_t *value);
 
 /**
  * @brief Helper routine to write a specific value into a Value Block
@@ -614,10 +623,14 @@ mfrc522_status_code_t mfrc522_mifare_get_value(mfrc522_t *dev,
  * @param[in] block_addr  Block (0x00-0xff) number
  * @param[in] value       New value of the Value Block
  *
- * @return MFRC522_STATUS_OK on success, MFRC522_STATUS_??? otherwise
+ * @retval  0             on success
+ * @retval -ECONNABORTED  when a collision occurred
+ * @retval -EINVAL        on invalid argument
+ * @retval -EIO           on communication error
+ * @retval -ENOBUFS       when a buffer is too small to receive data
+ * @retval -ETIMEDOUT     on timeout
  */
-mfrc522_status_code_t mfrc522_mifare_set_value(mfrc522_t *dev,
-                                               uint8_t block_addr, int32_t value);
+int mfrc522_mifare_set_value(mfrc522_t *dev, uint8_t block_addr, int32_t value);
 
 /**
  * @brief Authenticate with a NTAG216
@@ -628,11 +641,13 @@ mfrc522_status_code_t mfrc522_mifare_set_value(mfrc522_t *dev,
  * @param[in]  password  Password (must have a size of exactly 4 bytes)
  * @param[out] p_ack     result (must have a size of exactly 2 bytes)
  *
- * @return MFRC522_STATUS_OK on success, MFRC522_STATUS_??? otherwise
+ * @retval  0             on success
+ * @retval -ECONNABORTED  when a collision occurred
+ * @retval -EIO           on communication error
+ * @retval -ENOBUFS       when a buffer is too small to receive data
+ * @retval -ETIMEDOUT     on timeout
  */
-mfrc522_status_code_t mfrc522_pcd_ntag216_auth(mfrc522_t *dev,
-                                               const uint8_t *password,
-                                               uint8_t p_ack[]);
+int mfrc522_pcd_ntag216_auth(mfrc522_t *dev, const uint8_t *password, uint8_t p_ack[]);
 
 /**
  * @brief Wrapper for MIFARE protocol communication
@@ -645,21 +660,16 @@ mfrc522_status_code_t mfrc522_pcd_ntag216_auth(mfrc522_t *dev,
  * @param[in] send_len        Number of bytes in send_data
  * @param[in] accept_timeout  If true, then a timeout is also a success
  *
- * @return MFRC522_STATUS_OK on success, MFRC522_STATUS_??? otherwise
+ * @retval  0             on success
+ * @retval -ECONNABORTED  when a collision occurred
+ * @retval -EINVAL        on invalid argument
+ * @retval -EIO           on communication error
+ * @retval -ENOBUFS       when a buffer is too small to receive data
+ * @retval -ETIMEDOUT     on timeout
  */
-mfrc522_status_code_t mfrc522_pcd_mifare_transceive(mfrc522_t *dev,
-                                                    const uint8_t *send_data,
-                                                    uint8_t send_len,
-                                                    bool accept_timeout);
-
-/**
- * @brief Returns the name for a status code
- *
- * @param[in] code  Status code enum
- *
- * @return Status code name
- */
-const char *mfrc522_get_status_code_string(mfrc522_status_code_t code);
+int mfrc522_pcd_mifare_transceive(mfrc522_t *dev,
+                                  const uint8_t *send_data, uint8_t send_len,
+                                  bool accept_timeout);
 
 /**
  * @brief Translates the SAK (Select Acknowledge) to a PICC type
@@ -710,9 +720,13 @@ void mfrc522_mifare_set_access_bits(uint8_t *access_bit_buffer,
  *
  * @param[in] dev  Device descriptor of the MFRC522
  *
- * @return MFRC522_STATUS_OK on success, MFRC522_STATUS_??? otherwise
+ * @retval  0             on success
+ * @retval -ECONNABORTED  when a collision occurred
+ * @retval -EIO           on communication error
+ * @retval -ENOBUFS       when a buffer is too small to receive data
+ * @retval -ETIMEDOUT     on timeout
  */
-mfrc522_status_code_t mfrc522_mifare_open_uid_backdoor(mfrc522_t *dev);
+int mfrc522_mifare_open_uid_backdoor(mfrc522_t *dev);
 
 /**
  * @brief Read entire block 0, including all manufacturer data, and overwrites
@@ -728,21 +742,30 @@ mfrc522_status_code_t mfrc522_mifare_open_uid_backdoor(mfrc522_t *dev);
  * @param[in] new_uid       New UID to set on PICC
  * @param[in] new_uid_size  Size of new UID
  *
- * @return MFRC522_STATUS_OK on success, MFRC522_STATUS_??? otherwise
+ * @retval  0             on success
+ * @retval -ECANCELED     on internal error
+ * @retval -ECONNABORTED  when a collision occurred
+ * @retval -EINVAL        on invalid argument
+ * @retval -EIO           on communication error
+ * @retval -ENOBUFS       when a buffer is too small to receive data
+ * @retval -ETIMEDOUT     on timeout
  */
-mfrc522_status_code_t mfrc522_mifare_set_uid(mfrc522_t *dev,
-                                             mfrc522_uid_t *uid,
-                                             const uint8_t *new_uid,
-                                             uint8_t new_uid_size);
+int mfrc522_mifare_set_uid(mfrc522_t *dev, mfrc522_uid_t *uid,
+                           const uint8_t *new_uid, uint8_t new_uid_size);
 
 /**
  * @brief Reset entire sector 0 to zeroes, so the card can be read again by readers
  *
  * @param[in] dev  Device descriptor of the MFRC522
  *
- * @return MFRC522_STATUS_OK on success, MFRC522_STATUS_??? otherwise
+ * @retval  0             on success
+ * @retval -ECONNABORTED  when a collision occurred
+ * @retval -EINVAL        on invalid argument
+ * @retval -EIO           on communication error
+ * @retval -ENOBUFS       when a buffer is too small to receive data
+ * @retval -ETIMEDOUT     on timeout
  */
-mfrc522_status_code_t mfrc522_mifare_unbrick_uid_sector(mfrc522_t *dev);
+int mfrc522_mifare_unbrick_uid_sector(mfrc522_t *dev);
 
 /**
  * @brief Checks whether a new card could be detected
@@ -765,10 +788,15 @@ bool mfrc522_picc_is_new_card_present(mfrc522_t *dev);
  * @param[in] dev  Device descriptor of the MFRC522
  * @param[in] uid  PICC's UID
  *
- * @return MFRC522_STATUS_OK on success, MFRC522_STATUS_??? otherwise
+ * @retval  0             on success
+ * @retval -ECANCELED     on internal error
+ * @retval -ECONNABORTED  when a collision occurred
+ * @retval -EINVAL        on invalid argument
+ * @retval -EIO           on communication error
+ * @retval -ENOBUFS       when a buffer is too small to receive data
+ * @retval -ETIMEDOUT     on timeout
  */
-mfrc522_status_code_t mfrc522_picc_read_card_serial(mfrc522_t *dev,
-                                                    mfrc522_uid_t *uid);
+int mfrc522_picc_read_card_serial(mfrc522_t *dev, mfrc522_uid_t *uid);
 
 /**
  * @brief Dump debug info about the connected PCD to stdout
@@ -785,7 +813,6 @@ void mfrc522_pcd_dump_version_to_serial(mfrc522_t *dev);
  *
  * @param[in] dev  Device descriptor of the MFRC522
  * @param[in] uid  PICC's UID
- *
  */
 void mfrc522_picc_dump_to_serial(mfrc522_t *dev, mfrc522_uid_t *uid);
 
@@ -805,10 +832,8 @@ void mfrc522_picc_dump_details_to_serial(mfrc522_uid_t *uid);
  * @param[in] uid        PICC's UID
  * @param[in] picc_type  PICC type enum
  * @param[in] key        Key A used for all sectors.
- *
  */
-void mfrc522_picc_dump_mifare_classic_to_serial(mfrc522_t *dev,
-                                                mfrc522_uid_t *uid,
+void mfrc522_picc_dump_mifare_classic_to_serial(mfrc522_t *dev, mfrc522_uid_t *uid,
                                                 mfrc522_picc_type_t picc_type,
                                                 mfrc522_mifare_key_t *key);
 
@@ -823,12 +848,9 @@ void mfrc522_picc_dump_mifare_classic_to_serial(mfrc522_t *dev,
  * @param[in] uid     PICC's UID
  * @param[in] key     Key A for the sector.
  * @param[in] sector  The sector to dump, 0..39
- *
  */
-void mfrc522_picc_dump_mifare_classic_sector_to_serial(mfrc522_t *dev,
-                                                       mfrc522_uid_t *uid,
-                                                       mfrc522_mifare_key_t *key,
-                                                       uint8_t sector);
+void mfrc522_picc_dump_mifare_classic_sector_to_serial(mfrc522_t *dev, mfrc522_uid_t *uid,
+                                                       mfrc522_mifare_key_t *key, uint8_t sector);
 
 /**
  * @brief Dump memory contents of a MIFARE Ultralight PICC to stdout

@@ -44,8 +44,8 @@ int get_uid(mfrc522_uid_t *uid, bool stop_read)
     puts("Card detected. Read card serial ...");
 
     /* Since a PICC placed get Serial and continue */
-    mfrc522_status_code_t status = mfrc522_picc_read_card_serial(&mfrc522_dev, uid);
-    if (status != MFRC522_STATUS_OK) {
+    rc = mfrc522_picc_read_card_serial(&mfrc522_dev, uid);
+    if (rc != 0) {
         return 0;
     }
 
@@ -265,8 +265,8 @@ int set_uid(int argc, char **argv)
 
         uint8_t uid_buf[4] = { byte_1, byte_2, byte_3, byte_4 };
 
-        mfrc522_status_code_t status = mfrc522_mifare_set_uid(&mfrc522_dev, &uid, uid_buf, 4);
-        printf("status = %s\n", mfrc522_get_status_code_string(status));
+        int status = mfrc522_mifare_set_uid(&mfrc522_dev, &uid, uid_buf, 4);
+        printf("status = %d\n", status);
     }
 
     return 0;
