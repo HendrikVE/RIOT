@@ -8,5 +8,6 @@ SRC += cborencoder_close_container_checked.c
 SRC += cborparser.c
 SRC += cborpretty.c
 SRC += cborvalidation.c
+SRC += cborparser_dup_string.c
 
 include $(RIOTBASE)/Makefile.base
