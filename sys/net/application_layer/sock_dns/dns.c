@@ -42,14 +42,14 @@ void auto_init_sock_dns(void)
         && CONFIG_AUTO_INIT_SOCK_DNS_SERVER_PORT <= 0xffff);
 
     switch(CONFIG_AUTO_INIT_SOCK_DNS_IP_VERSION) {
-    #ifdef MODULE_IPV4_ADDR
+    #if defined(MODULE_IPV4_ADDR) && defined(SOCK_HAS_IPV4)
         case 4:
             inet_pton(AF_INET, CONFIG_AUTO_INIT_SOCK_DNS_SERVER_ADDR,
                       sock_dns_server.addr.ipv4);
             sock_dns_server.family = AF_INET;
             break;
     #endif
-    #ifdef MODULE_IPV6_ADDR
+    #if defined(MODULE_IPV6_ADDR) && defined(SOCK_HAS_IPV6)
         case 6:
             inet_pton(AF_INET6, CONFIG_AUTO_INIT_SOCK_DNS_SERVER_ADDR,
                       sock_dns_server.addr.ipv6);

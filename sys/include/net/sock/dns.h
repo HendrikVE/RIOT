@@ -43,9 +43,9 @@ extern "C" {
  */
 #ifndef CONFIG_AUTO_INIT_SOCK_DNS_IP_VERSION
     /* IPv6 is preferred */
-    #if defined(MODULE_IPV6_ADDR)
+    #if defined(MODULE_IPV6_ADDR) && defined(SOCK_HAS_IPV6)
         #define CONFIG_AUTO_INIT_SOCK_DNS_IP_VERSION 6
-    #elif defined(MODULE_IPV4_ADDR)
+    #elif defined(MODULE_IPV4_ADDR) && defined(SOCK_HAS_IPV4)
         #define CONFIG_AUTO_INIT_SOCK_DNS_IP_VERSION 4
     #else
         #error "Neither IPv4 nor IPv6 included in build"

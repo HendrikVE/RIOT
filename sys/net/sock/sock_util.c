@@ -45,12 +45,12 @@ int sock_tl_ep_fmt(const struct _sock_tl_ep *endpoint,
     switch (endpoint->family) {
 #ifdef SOCK_HAS_IPV4
     case AF_INET:
-        addr_ptr = &endpoint->addr.ipv4;
+        addr_ptr = (void*)&endpoint->addr.ipv4;
         break;
 #endif
 #ifdef SOCK_HAS_IPV6
     case AF_INET6:
-        addr_ptr = &endpoint->addr.ipv6;
+        addr_ptr = (void*)&endpoint->addr.ipv6;
         break;
 #endif
     default:
@@ -71,7 +71,6 @@ int sock_tl_ep_fmt(const struct _sock_tl_ep *endpoint,
         sprintf(addr_str + strlen(addr_str), "%%%4u", endpoint->netif);
 #endif
     }
-#endif
 
     if (port) {
         *port = endpoint->port;

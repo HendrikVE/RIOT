@@ -157,8 +157,7 @@ int getaddrinfo(const char *nodename, const char *servname,
                     addr.type = AF_INET;
                 }
                 else {
-                    /* try IPv6 */
-                    addr.type = AF_INET6;
+                    return EAI_NONAME;
                 }
             }
 
@@ -218,6 +217,10 @@ int getaddrinfo(const char *nodename, const char *servname,
             ip_addr_set_loopback_val(hints->ai_family == AF_INET6, addr);
         }
         */
+//        extern const struct in6_addr in6addr_any;        /* :: */
+//        extern const struct in6_addr in6addr_loopback;   /* ::1 */
+//        #define IN6ADDR_ANY_INIT { { { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 } } }
+//        #define IN6ADDR_LOOPBACK_INIT { { { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1 } } }
         return EAI_FAIL;
     }
 
