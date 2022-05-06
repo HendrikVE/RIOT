@@ -30,6 +30,10 @@
 #include "rest_client/mqttnet.h"
 #include "rest_client/transport/mqttsn.h"
 
+#if MEMORY_BENCHMARK
+extern void heap_stats(void);
+#endif /* MEMORY_BENCHMARK */
+
 #include "rest_client.h"
 
 #define ENABLE_DEBUG REST_CLIENT_ENABLE_DEBUG
@@ -381,6 +385,10 @@ rest_client_result_t rest_client_transport_mqttsn_init(rest_client_t *rest_clien
     /* setup tx/rx buffers */
     mqtt_context->tx_buf = (uint8_t *)WOLFMQTT_MALLOC(MAX_BUFFER_SIZE);
     mqtt_context->rx_buf = (uint8_t *)WOLFMQTT_MALLOC(MAX_BUFFER_SIZE);
+
+#if MEMORY_BENCHMARK
+    heap_stats();
+#endif
 
     /* Initialize MqttClient structure */
     rc = MqttClient_Init(&mqtt_context->client, &mqtt_context->net,

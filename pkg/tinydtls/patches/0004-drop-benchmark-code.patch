@@ -1,0 +1,239 @@
+From 7205329ef64070bae643354814ada0e945f0801c Mon Sep 17 00:00:00 2001
+From: HendrikVE <hendrik1995@msn.com>
+Date: Fri, 6 May 2022 23:07:51 +0200
+Subject: [PATCH] drop! benchmark code
+
+---
+ crypto.c  | 22 ++++++++++++++++++++--
+ dtls.c    | 13 ++++++++++++-
+ hmac.c    | 13 ++++++++++++-
+ netq.c    | 22 ++++++++++++++++++++--
+ peer.c    | 14 +++++++++++++-
+ session.c |  9 +++++++++
+ 6 files changed, 86 insertions(+), 7 deletions(-)
+
+diff --git a/crypto.c b/crypto.c
+index 43d3079..a119aba 100644
+--- a/crypto.c
++++ b/crypto.c
+@@ -15,6 +15,10 @@
+  *
+  *******************************************************************************/
+ 
++#if MEMORY_BENCHMARK
++extern void heap_stats(void);
++#endif
++
+ #include <stdio.h>
+ 
+ #include "tinydtls.h"
+@@ -75,7 +79,14 @@ void crypto_init(void)
+ }
+ 
+ static dtls_handshake_parameters_t *dtls_handshake_malloc(void) {
+-  return malloc(sizeof(dtls_handshake_parameters_t));
++
++  dtls_handshake_parameters_t *params = malloc(sizeof(dtls_handshake_parameters_t));
++
++#if MEMORY_BENCHMARK
++  heap_stats();
++#endif
++
++  return params;
+ }
+ 
+ static void dtls_handshake_dealloc(dtls_handshake_parameters_t *handshake) {
+@@ -83,7 +94,14 @@ static void dtls_handshake_dealloc(dtls_handshake_parameters_t *handshake) {
+ }
+ 
+ static dtls_security_parameters_t *dtls_security_malloc(void) {
+-  return malloc(sizeof(dtls_security_parameters_t));
++
++  dtls_security_parameters_t *params = malloc(sizeof(dtls_security_parameters_t));
++
++#if MEMORY_BENCHMARK
++  heap_stats();
++#endif
++
++  return params;
+ }
+ 
+ static void dtls_security_dealloc(dtls_security_parameters_t *security) {
+diff --git a/dtls.c b/dtls.c
+index 507a23b..3d7f251 100644
+--- a/dtls.c
++++ b/dtls.c
+@@ -17,6 +17,10 @@
+  *
+  *******************************************************************************/
+ 
++#if MEMORY_BENCHMARK
++extern void heap_stats(void);
++#endif
++
+ #include "tinydtls.h"
+ #include "dtls_time.h"
+ 
+@@ -204,7 +208,14 @@ static inline void free_context(dtls_context_t *context) {
+ 
+ static inline dtls_context_t *
+ malloc_context(void) {
+-  return (dtls_context_t *)malloc(sizeof(dtls_context_t));
++
++  dtls_context_t *ctx = (dtls_context_t *)malloc(sizeof(dtls_context_t));
++
++#if MEMORY_BENCHMARK
++  heap_stats();
++#endif
++
++  return ctx;
+ }
+ 
+ static inline void
+diff --git a/hmac.c b/hmac.c
+index d23944b..defd0ce 100644
+--- a/hmac.c
++++ b/hmac.c
+@@ -15,6 +15,10 @@
+  *
+  *******************************************************************************/
+ 
++#if MEMORY_BENCHMARK
++extern void heap_stats(void);
++#endif
++
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+@@ -33,7 +37,14 @@
+ 
+ static inline dtls_hmac_context_t *
+ dtls_hmac_context_new(void) {
+-  return (dtls_hmac_context_t *)malloc(sizeof(dtls_hmac_context_t));
++
++  dtls_hmac_context_t *ctx = (dtls_hmac_context_t *)malloc(sizeof(dtls_hmac_context_t));
++
++#if MEMORY_BENCHMARK
++  heap_stats();
++#endif
++
++  return ctx;
+ }
+ 
+ static inline void
+diff --git a/netq.c b/netq.c
+index 06754f7..0bb5e7f 100644
+--- a/netq.c
++++ b/netq.c
+@@ -15,6 +15,10 @@
+  *
+  *******************************************************************************/
+ 
++#if MEMORY_BENCHMARK
++extern void heap_stats(void);
++#endif
++
+ #include "dtls_debug.h"
+ #include "netq.h"
+ #include "utlist.h"
+@@ -33,7 +37,14 @@
+ 
+ static inline netq_t *
+ netq_malloc_node(size_t size) {
+-  return (netq_t *)malloc(sizeof(netq_t) + size);
++
++  netq_t *netq = (netq_t *)malloc(sizeof(netq_t) + size);
++
++#if MEMORY_BENCHMARK
++  heap_stats();
++#endif
++
++  return netq;
+ }
+ 
+ static inline void
+@@ -48,7 +59,14 @@ MEMB(netq_storage, netq_t, NETQ_MAXCNT);
+ 
+ static inline netq_t *
+ netq_malloc_node(size_t size) {
+-  return (netq_t *)memb_alloc(&netq_storage);
++
++  netq_t *netq = (netq_t *)memb_alloc(&netq_storage);
++
++#if MEMORY_BENCHMARK
++  heap_stats();
++#endif
++
++  return netq;
+ }
+ 
+ static inline void
+diff --git a/peer.c b/peer.c
+index bf06fae..cae30a7 100644
+--- a/peer.c
++++ b/peer.c
+@@ -15,6 +15,10 @@
+  *
+  *******************************************************************************/
+ 
++#if MEMORY_BENCHMARK
++extern void heap_stats(void);
++#endif
++
+ #include "global.h"
+ #include "peer.h"
+ #include "dtls_debug.h"
+@@ -26,7 +30,14 @@ void peer_init(void)
+ 
+ static inline dtls_peer_t *
+ dtls_malloc_peer(void) {
+-  return (dtls_peer_t *)malloc(sizeof(dtls_peer_t));
++
++  dtls_peer_t *peer = (dtls_peer_t *)malloc(sizeof(dtls_peer_t));
++
++#if MEMORY_BENCHMARK
++  heap_stats();
++#endif
++
++  return peer;
+ }
+ 
+ void
+@@ -90,6 +101,7 @@ dtls_new_peer(const session_t *session) {
+   dtls_peer_t *peer;
+ 
+   peer = dtls_malloc_peer();
++
+   if (peer) {
+     memset(peer, 0, sizeof(dtls_peer_t));
+     memcpy(&peer->session, session, sizeof(session_t));
+diff --git a/session.c b/session.c
+index dea8990..55f2ec6 100644
+--- a/session.c
++++ b/session.c
+@@ -14,6 +14,10 @@
+  *
+  *******************************************************************************/
+ 
++#if MEMORY_BENCHMARK
++extern void heap_stats(void);
++#endif
++
+ #include "session.h"
+ 
+ #ifdef HAVE_ASSERT_H
+@@ -104,6 +108,11 @@ dtls_new_session(struct sockaddr *addr, socklen_t addrlen) {
+   session_t *sess;
+ 
+   sess = malloc(sizeof(session_t));
++
++#if MEMORY_BENCHMARK
++  heap_stats();
++#endif
++
+   if (!sess)
+     return NULL;
+   dtls_session_init(sess);
+-- 
+2.25.1
+

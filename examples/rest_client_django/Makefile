@@ -21,9 +21,6 @@ DEVELHELP ?= 1
 # Change this to 0 to show compiler invocation lines by default
 QUIET ?= 1
 
-# Print for helpful information when hitting stack overflow
-# USEMODULE += ps
-
 USEMODULE += rest_client
 
 USEPKG    += tinycbor
@@ -35,6 +32,13 @@ ENABLE_DEBUG ?= 1
 CFLAGS += -DREST_CLIENT_ENABLE_DEBUG=$(ENABLE_DEBUG)
 ifneq (0,$(ENABLE_DEBUG))
   USEMODULE += rest_client_debug
+endif
+
+MEMORY_BENCHMARK ?= 0
+CFLAGS += -DMEMORY_BENCHMARK=$(MEMORY_BENCHMARK)
+ifneq (0,$(MEMORY_BENCHMARK))
+  # Print thread statistics
+  USEMODULE += ps
 endif
 
 # for now only one should be possible at the same time

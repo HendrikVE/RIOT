@@ -27,6 +27,11 @@
 #include "cbor.h"
 #include "ztimer.h"
 
+#if MEMORY_BENCHMARK
+#include "ps.h"
+extern void heap_stats(void);
+#endif
+
 #include "rest_client.h"
 
 #define ENABLE_DEBUG REST_CLIENT_ENABLE_DEBUG
@@ -283,6 +288,10 @@ int main(void)
     rest_client_result_t rc;
     (void)rc;
 
+#if MEMORY_BENCHMARK
+    heap_stats();
+#endif
+
     _wait_for_network_set_up();
 
 #if IS_USED(MODULE_REST_CLIENT_TRANSPORT_COAP)
@@ -331,6 +340,16 @@ int main(void)
     assert(rc == REST_CLIENT_RESULT_OK);
     rc = rest_client_deinit(&_rest_client_mqttsn);
     assert(rc == REST_CLIENT_RESULT_OK);
+#endif
+
+    /* wait for request to finish before printing statistics */
+    ztimer_sleep(ZTIMER_MSEC, 4000);
+
+#if MEMORY_BENCHMARK
+    /* print stack statistics; heap statistics are also printed in mqtt and mqttsn transport
+     * implementations */
+    ps();
+    heap_stats();
 #endif
 
     return 0;
