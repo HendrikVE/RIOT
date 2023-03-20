@@ -99,5 +99,21 @@ int main(void)
 
     candev->driver->init(candev);
 
+    struct can_frame frame = {
+        .can_dlc = 5,
+        .can_id = 0x8C122330,
+        .data = {
+            0,
+            1,
+            2,
+            3,
+            0xF
+        }
+    };
+
+    candev->driver->send(candev, &frame);
+    candev->driver->send(candev, &frame);
+    candev->driver->send(candev, &frame);
+
     return 0;
 }
