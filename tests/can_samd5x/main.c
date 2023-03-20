@@ -35,7 +35,7 @@ static can_t can_samd5x;
 #include <debug.h>
 
 #ifndef TEST_MODE
-#define TEST_MODE     1
+#define TEST_MODE     0
 #endif
 
 static candev_t *candev = NULL;
@@ -115,13 +115,32 @@ int main(void)
         }
     };
 
-#ifdef TEST_MODE
+#if IS_ACTIVE(TEST_MODE)
     candev_samd5x_enter_test_mode(candev);
 #endif
 
     candev->driver->send(candev, &frame);
     candev->driver->send(candev, &frame);
     candev->driver->send(candev, &frame);
+
+    struct can_filter filter = {0};
+    filter.can_filter_conf = CAN_FILTER_RX_FIFO_1;
+    filter.can_filter_type = CAN_FILTER_TYPE_CLASSIC;
+    filter.can_id = 0x0111;
+    filter.can_mask = 0x7FF;
+    candev->driver->set_filter(candev, &filter);
+    filter.can_id = 0x0112;
+    filter.can_filter_conf = CAN_FILTER_DISABLE;
+    candev->driver->set_filter(candev, &filter);
+    filter.can_id = 0x0112;
+    filter.can_filter_conf = CAN_FILTER_RX_FIFO_0;
+    candev->driver->set_filter(candev, &filter);
+    filter.can_id = 0x8C000000;
+    filter.can_mask = 0x9FFFFFFF;
+    candev->driver->set_filter(candev, &filter);
+    filter.can_id = 0x8C000001;
+    filter.can_mask = 0x9FFFFFFF;
+    candev->driver->set_filter(candev, &filter);
 
     return 0;
 }
