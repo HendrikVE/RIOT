@@ -34,6 +34,10 @@ static can_t can_samd5x;
 #define ENABLE_DEBUG 0
 #include <debug.h>
 
+#ifndef TEST_MODE
+#define TEST_MODE     1
+#endif
+
 static candev_t *candev = NULL;
 
 static void _can_event_callback(candev_t *dev, candev_event_t event, void *arg)
@@ -110,6 +114,10 @@ int main(void)
             0xF
         }
     };
+
+#ifdef TEST_MODE
+    candev_samd5x_enter_test_mode(candev);
+#endif
 
     candev->driver->send(candev, &frame);
     candev->driver->send(candev, &frame);
