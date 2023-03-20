@@ -129,7 +129,7 @@ int main(void)
     filter.can_id = 0x0111;
     filter.can_mask = 0x7FF;
     candev->driver->set_filter(candev, &filter);
-    filter.can_id = 0x0112;
+    filter.can_id = 0x0113;
     filter.can_filter_conf = CAN_FILTER_DISABLE;
     candev->driver->set_filter(candev, &filter);
     filter.can_id = 0x0112;
@@ -141,6 +141,10 @@ int main(void)
     filter.can_id = 0x8C000001;
     filter.can_mask = 0x9FFFFFFF;
     candev->driver->set_filter(candev, &filter);
+    
+    filter.can_id = 0x8C000001;
+    filter.can_mask = 0x9FFFFFFF;
+    candev->driver->remove_filter(candev, &filter);
 
     return 0;
 }
