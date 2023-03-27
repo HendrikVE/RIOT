@@ -14,7 +14,9 @@ static const can_conf_t candev_conf[] = {
         .can = CAN0,
         .rx_pin = GPIO_PIN(PA, 23),
         .tx_pin = GPIO_PIN(PA, 22),
+        .mux = GPIO_MUX_I,
         .tdc_ctrl = false,
+        .dar_ctrl = false,
         .tx_fifo_queue_ctrl = false,
     },
     {
@@ -22,8 +24,10 @@ static const can_conf_t candev_conf[] = {
         .can = CAN1,
         .rx_pin = GPIO_PIN(PB, 13),
         .tx_pin = GPIO_PIN(PB, 12),
+        .mux = GPIO_MUX_H,
         .tdc_ctrl = false,
-        .tx_fifo_queue_ctrl = true,
+        .dar_ctrl = true,
+        .tx_fifo_queue_ctrl = false,
     }
 };
 
