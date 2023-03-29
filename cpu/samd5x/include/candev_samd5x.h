@@ -26,15 +26,15 @@ extern "C" {
 #define CANDEV_SAMD5X_DEFAULT_EXT_FILTER_NUM	3
 #endif
 
-#ifndef CANDEV_SAMD5X_DEFAULT_RX_FIFO_0_ELTS_NUM	
+#ifndef CANDEV_SAMD5X_DEFAULT_RX_FIFO_0_ELTS_NUM
 #define CANDEV_SAMD5X_DEFAULT_RX_FIFO_0_ELTS_NUM	3
 #endif
 
-#ifndef CANDEV_SAMD5X_DEFAULT_RX_FIFO_1_ELTS_NUM	
+#ifndef CANDEV_SAMD5X_DEFAULT_RX_FIFO_1_ELTS_NUM
 #define CANDEV_SAMD5X_DEFAULT_RX_FIFO_1_ELTS_NUM	3
 #endif
 
-#ifndef CANDEV_SAMD5X_DEFAULT_TX_EVT_FIFO_ELTS_NUM	
+#ifndef CANDEV_SAMD5X_DEFAULT_TX_EVT_FIFO_ELTS_NUM
 #define CANDEV_SAMD5X_DEFAULT_TX_EVT_FIFO_ELTS_NUM	1
 #endif
 
@@ -140,7 +140,7 @@ typedef struct {
 	uint32_t res:5;			/** reserved */
 	uint32_t sfid1:11;		/** Standard Filer ID 1 */
 	uint32_t sfec:3;		/** Standard Filter Element Configuration */
-	uint32_t sft:2;			/** Standard Filter Type */	
+	uint32_t sft:2;			/** Standard Filter Type */
 } can_std_filter_t;
 
 typedef struct {
@@ -218,7 +218,7 @@ void candev_samd5x_set_pins(can_t *dev);
 
 void candev_samd5x_tdc_control(can_t *dev);
 
-void candev_samd5x_enter_test_mode(candev_t *candev);
+void candev_samd5x_set_test_mode(candev_t *candev, bool silent);
 
 int candev_samd5x_irq_init(candev_t *candev, can_irq_source_t irq_source, can_irq_line_t irq_line);
 

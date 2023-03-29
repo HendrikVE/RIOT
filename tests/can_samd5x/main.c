@@ -33,7 +33,7 @@
 static can_t can_samd5x;
 candev_t *candev = NULL;
 
-#define ENABLE_DEBUG 0
+#define ENABLE_DEBUG 1
 #include <debug.h>
 
 static void _can_event_callback(candev_t *dev, candev_event_t event, void *arg)
@@ -71,6 +71,9 @@ static void _can_event_callback(candev_t *dev, candev_event_t event, void *arg)
 
 int main(void)
 {
+    // Wait for the terminal to boot and catch our debug output
+    ztimer_sleep(ZTIMER_MSEC, 500);
+
     puts("candev test application\n");
 
     gpio_init(GPIO_PIN(PC, 13), GPIO_IN);
@@ -122,7 +125,7 @@ int main(void)
         }
     };
 
-        struct can_frame frame_2 = {
+    struct can_frame frame_2 = {
         .can_dlc = 5,
         .can_id = 0x9B001122,
         .data = {
@@ -134,9 +137,7 @@ int main(void)
         }
     };
 
-#if IS_ACTIVE(TEST_MODE)
-    candev_samd5x_enter_test_mode(candev);
-#endif
+    candev_samd5x_set_test_mode(candev, false);
 
     candev->driver->send(candev, &frame_1);
     candev->driver->send(candev, &frame_2);
